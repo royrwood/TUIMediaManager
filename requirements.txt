@@ -1,0 +1,6 @@
+aiohttp
+imdbinfo
+parsel
+snoop
+textual
+textual-fspicker
