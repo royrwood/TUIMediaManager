@@ -9,17 +9,19 @@ import re
 
 import aiohttp
 import textual
-from textual.worker import Worker
+from textual import on
 from textual.app import App, ComposeResult
+from textual.containers import Vertical, Horizontal
 from textual.message import Message
 from textual.screen import Screen, ModalScreen
-from textual.widgets import DataTable, Label, ListItem, ListView, Log, Footer
+from textual.widgets import DataTable, Label, ListItem, ListView, Log, Footer, Button
+from textual.worker import Worker, WorkerState
 
 from textual_fspicker import SelectDirectory
 
 
 LOGGER = logging.getLogger(__name__)
-logging.basicConfig(filename='mini_media_manager.log', encoding='utf-8', level=logging.INFO)
+logging.basicConfig(filename='tui_media_manager.log', encoding='utf-8', level=logging.INFO)
 LOGGER.info('Starting up...')
 
 
@@ -242,46 +244,93 @@ class TableScreen(Screen):
                     return imdb_info_list
 
     async def scan_folder(self, folder_path: Path, include_extensions: str = None) -> None:
-        if include_extensions is None:
-            include_extensions = 'mkv,mp4'
+        try:
+            if include_extensions is None:
+                include_extensions = 'mkv,mp4'
 
-        include_extensions_list = [ext.lower().strip() for ext in include_extensions.split(',')]
+            include_extensions_list = [ext.lower().strip() for ext in include_extensions.split(',')]
 
-        self.post_message(LogMessage(f"Beginning processing of directory: {str(folder_path)}"))
+            self.post_message(LogMessage(f"Beginning processing of directory: {str(folder_path)}"))
 
-        for dir_path, dirs, files in os.walk(folder_path):
-            for filename in files:
-                file_path = os.path.join(dir_path, filename)
-                filename_parts = os.path.splitext(filename)
-                filename_no_extension = filename_parts[0]
-                filename_extension = filename_parts[1]
-                if filename_extension.startswith('.'):
-                    filename_extension = filename_extension[1:]
+            for dir_path, dirs, files in os.walk(folder_path):
+                for filename in files:
+                    file_path = os.path.join(dir_path, filename)
+                    filename_parts = os.path.splitext(filename)
+                    filename_no_extension = filename_parts[0]
+                    filename_extension = filename_parts[1]
+                    if filename_extension.startswith('.'):
+                        filename_extension = filename_extension[1:]
 
-                if filename_extension.lower() not in include_extensions_list:
-                    continue
+                    if filename_extension.lower() not in include_extensions_list:
+                        continue
 
-                scrubbed_video_file_name, year = self.scrub_video_file_name(filename_no_extension)
-                video_file = VideoFile(file_path=file_path, scrubbed_file_name=scrubbed_video_file_name, scrubbed_file_year=year)
+                    scrubbed_video_file_name, year = self.scrub_video_file_name(filename_no_extension)
+                    video_file = VideoFile(file_path=file_path, scrubbed_file_name=scrubbed_video_file_name, scrubbed_file_year=year)
 
-                self.post_message(LogMessage(f"Getting IMDB info for video file: {file_path}"))
-                imdb_info_list = await self.get_imdb_basic_info(video_file.scrubbed_file_name, video_file.scrubbed_file_year, num_matches=1)
-                imdb_info = imdb_info_list[0]
-                if imdb_info:
-                    self.post_message(LogMessage(f"Found: tt={imdb_info.imdb_tt}, name={imdb_info.imdb_name}, year={imdb_info.imdb_year}"))
-                    video_file.imdb_tt = imdb_info.imdb_tt
-                    video_file.imdb_name = imdb_info.imdb_name
-                    video_file.imdb_year = imdb_info.imdb_year
-                    video_file.imdb_rating = imdb_info.imdb_rating
-                    video_file.imdb_plot = imdb_info.imdb_plot
-                    video_file.imdb_genres = imdb_info.imdb_genres
+                    self.post_message(LogMessage(f"Getting IMDB info for video file: {file_path}"))
+                    imdb_info_list = await self.get_imdb_basic_info(video_file.scrubbed_file_name, video_file.scrubbed_file_year, num_matches=1)
+                    imdb_info = imdb_info_list[0]
+                    if imdb_info:
+                        self.post_message(LogMessage(f"Found: tt={imdb_info.imdb_tt}, name={imdb_info.imdb_name}, year={imdb_info.imdb_year}"))
+                        video_file.imdb_tt = imdb_info.imdb_tt
+                        video_file.imdb_name = imdb_info.imdb_name
+                        video_file.imdb_year = imdb_info.imdb_year
+                        video_file.imdb_rating = imdb_info.imdb_rating
+                        video_file.imdb_plot = imdb_info.imdb_plot
+                        video_file.imdb_genres = imdb_info.imdb_genres
 
-                    self.post_message(LogMessage(f"Processed video file: {file_path}"))
-                    self.add_video_file(video_file)
+                        self.post_message(LogMessage(f"Processed video file: {file_path}"))
+                        self.add_video_file(video_file)
 
-                await asyncio.sleep(1.0)
+                    await asyncio.sleep(5.0)
 
-        self.post_message(LogMessage(f"End processing of directory: {str(folder_path)}"))
+            self.post_message(LogMessage(f"End processing of directory: {str(folder_path)}"))
+
+        except asyncio.CancelledError:
+            self.post_message(LogMessage(f"Caught CancelledError while processing directory: {str(folder_path)}"))
+
+
+class ProgressDialog(ModalScreen):
+    CSS = """
+        ProgressDialog {
+            align-horizontal: center;
+            
+            & > Vertical {
+                width: auto;
+                height: auto;
+                offset-y: 25vh;
+                border: round white;
+                padding: 1 2;
+                
+                & > Label {
+                    margin-bottom: 1;
+                }
+                                
+                & > Horizontal {
+                    width: 100%;
+                    height: auto;
+                    align-horizontal: right;
+                }
+            }
+        }   
+     """
+
+    def __init__(self, directory_path: Path):
+        super().__init__(self.CSS)
+        self.directory_path = directory_path
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label(f"Scanning items in directory {self.directory_path}", id="message_id"),
+            Horizontal(
+                Button('Cancel', compact=True, id='cancel_id')
+            )
+        )
+
+    @on(Button.Pressed)
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.post_message(LogMessage(f"ProgressDialog Button pressed"))
+        self.dismiss(True)
 
 
 class MyApp(App):
@@ -319,13 +368,14 @@ class MyApp(App):
             self.log_message(f'Received MainMenuAction = {action.name}')
 
             if action == MainMenuActions.PICK_A_DIRECTORY:
-                self.pick_a_directory()
+                self.pick_a_directory_and_start_scanning()
             elif action == MainMenuActions.SHOW_LOG_SCREEN:
                 self.switch_screen('log_screen')
             elif action == MainMenuActions.SHOW_TABLE_SCREEN:
                 self.switch_screen('table_screen')
             elif action == MainMenuActions.STOP_DIRECTORY_SCAN:
-                pass
+                if self.directory_scan_worker and self.directory_scan_worker.state == WorkerState.RUNNING:
+                    self.directory_scan_worker.cancel()
 
     @textual.on(LogMessage)
     def on_log_message(self, message: LogMessage) -> None:
@@ -335,13 +385,18 @@ class MyApp(App):
         log_screen = self.get_screen("log_screen", LogScreen)
         log_screen.info(message)
 
-    def pick_a_directory(self) -> None:
+    def pick_a_directory_and_start_scanning(self) -> None:
+        def _cancel_directory_scan(cancel_scan: bool) -> None:
+            if cancel_scan and self.directory_scan_worker and self.directory_scan_worker.state == WorkerState.RUNNING:
+                self.directory_scan_worker.cancel()
+
         def _pick_directory_result(directory_path: Path | None) -> Path | None:
             self.log_message(f'Selected directory: {directory_path}')
             if directory_path:
                 self.log_message(f'Starting worker to scan directory: {directory_path}')
                 self.directory_scan_worker = self.run_worker(self.table_screen.scan_folder(directory_path))
                 self.log_message(f'Started worker to scan directory: {directory_path}')
+                self.push_screen(ProgressDialog(directory_path), _cancel_directory_scan)
 
         self.push_screen(SelectDirectory(), _pick_directory_result)
 
