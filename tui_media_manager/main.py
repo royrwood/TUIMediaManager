@@ -14,7 +14,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Vertical, Horizontal
 from textual.message import Message
 from textual.screen import Screen, ModalScreen
-from textual.widgets import DataTable, Label, ListItem, ListView, Log, Footer, Button
+from textual.widgets import DataTable, Label, ListItem, ListView, Log, Footer, Button, TextArea
 from textual.worker import Worker, WorkerState
 
 from textual_fspicker import SelectDirectory
@@ -23,20 +23,6 @@ from textual_fspicker import SelectDirectory
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(filename='tui_media_manager.log', encoding='utf-8', level=logging.INFO)
 LOGGER.info('Starting up...')
-
-
-class MainMenuActions(StrEnum):
-    SHOW_TABLE_SCREEN = "Show Data Table"
-    SHOW_LOG_SCREEN = "Show Log"
-    PICK_A_DIRECTORY = "Pick a Directory"
-    STOP_DIRECTORY_SCAN = "Stop Directory Scan"
-
-
-class LogMessage(Message):
-    def __init__(self, message: str, level=0):
-        super().__init__()
-        self.message = message
-        self.level = level
 
 
 @dataclasses.dataclass
@@ -61,6 +47,31 @@ class IMDBInfo:
     imdb_rating: str = ''
     imdb_genres: list[str] = None
     imdb_plot: str = ''
+
+
+class MainMenuActions(StrEnum):
+    SHOW_TABLE_SCREEN = "Show Data Table"
+    SHOW_LOG_SCREEN = "Show Log"
+    PICK_A_DIRECTORY = "Pick a Directory"
+    STOP_DIRECTORY_SCAN = "Stop Directory Scan"
+
+
+class LogMessage(Message):
+    def __init__(self, message: str, level=0):
+        super().__init__()
+        self.message = message
+        self.level = level
+
+
+class DirectoryScanningComplete(Message):
+    def __init__(self):
+        super().__init__()
+
+
+class ShowMovieDetailsMessage(Message):
+    def __init__(self, video_file: VideoFile):
+        super().__init__()
+        self.video_file = video_file
 
 
 class MainMenu(ModalScreen):
@@ -124,6 +135,10 @@ class LogScreen(Screen):
 
 
 class TableScreen(Screen):
+    def __init__(self) -> None:
+        super().__init__()
+        self.video_files: dict[str, VideoFile] = dict()
+
     def compose(self) -> ComposeResult:
         yield DataTable(show_header=True, cell_padding=2, header_height=1, cursor_type="row", id="video_files")
         yield Footer()
@@ -134,9 +149,12 @@ class TableScreen(Screen):
         # table.add_row('', '', '', '')
 
     def add_video_file(self, video_file: VideoFile):
-        data_table = self.query_one(DataTable)
-        video_filename = Path(video_file.file_path).name
-        data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_filename, key=video_file.imdb_tt)
+        if video_file.file_path not in self.video_files:
+            self.video_files[video_file.file_path] = video_file
+
+            data_table = self.query_one(DataTable)
+            video_filename = Path(video_file.file_path).name
+            data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_filename, key=video_file.file_path)
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         self.post_message(LogMessage(f"DataTable row selected: cursor_row={event.cursor_row}, key={event.row_key}"))
@@ -145,6 +163,10 @@ class TableScreen(Screen):
         self.post_message(LogMessage(f"DataTable row data by index: {row_data}"))
         row_data = table.get_row(event.row_key)
         self.post_message(LogMessage(f"DataTable row data by key: {row_data}"))
+
+        file_path = event.row_key.value
+        video_file = self.video_files[file_path]
+        self.post_message(ShowMovieDetailsMessage(video_file))
 
     @staticmethod
     def scrub_video_file_name(file_name: str, filename_metadata_tokens: str = None) -> tuple[str, str]:
@@ -277,14 +299,16 @@ class TableScreen(Screen):
                         video_file.imdb_year = imdb_info.imdb_year
                         video_file.imdb_rating = imdb_info.imdb_rating
                         video_file.imdb_plot = imdb_info.imdb_plot
+                        video_file.imdb_plot = 'This is the plot\n\nMore plot details\n\nThe End.'
                         video_file.imdb_genres = imdb_info.imdb_genres
 
                         self.post_message(LogMessage(f"Processed video file: {file_path}"))
                         self.add_video_file(video_file)
 
-                    await asyncio.sleep(5.0)
+                    # await asyncio.sleep(5.0)
 
             self.post_message(LogMessage(f"End processing of directory: {str(folder_path)}"))
+            self.post_message(DirectoryScanningComplete())
 
         except asyncio.CancelledError:
             self.post_message(LogMessage(f"Caught CancelledError while processing directory: {str(folder_path)}"))
@@ -316,13 +340,68 @@ class ProgressDialog(ModalScreen):
      """
 
     def __init__(self, directory_path: Path):
-        super().__init__(self.CSS)
+        # super().__init__(self.CSS)
+        super().__init__()
         self.directory_path = directory_path
 
     def compose(self) -> ComposeResult:
         yield Vertical(
             Label(f"Scanning items in directory {self.directory_path}", id="message_id"),
             Horizontal(
+                Button('Cancel', compact=True, id='cancel_id')
+            )
+        )
+
+    @on(Button.Pressed)
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.post_message(LogMessage(f"ProgressDialog Button pressed"))
+        self.dismiss(True)
+
+
+class ShowMovieDetails(ModalScreen):
+    CSS = """
+        ShowMovieDetails {
+            align-horizontal: center;
+            align-vertical: middle;
+            max-width: 80vw;
+            max-height: 80vh;
+
+            & > Vertical {
+                width: auto;
+                height: auto;
+                border: round white;
+                padding: 1 2;
+
+                & > Label {
+                    width: auto;
+                    margin-bottom: 1;
+                }
+
+                & > TextArea {
+                    width: 100%;
+                    height: auto;
+                    margin-bottom: 1;
+                }
+
+                & > Horizontal {
+                    width: 100%;
+                    height: auto;
+                    align-horizontal: right;
+                }
+            }
+        }   
+     """
+
+    def __init__(self, video_file: VideoFile):
+        super().__init__()
+        self.video_file = video_file
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label(f" {self.video_file.file_path}", id="file_path_id"),
+            TextArea(self.video_file.imdb_plot, read_only=True, id="message_id"),
+            Horizontal(
+                Button('Refresh Details', compact=True, id='refresh_details_id'),
                 Button('Cancel', compact=True, id='cancel_id')
             )
         )
@@ -346,6 +425,7 @@ class MyApp(App):
         self.log_screen = self.get_screen("log_screen", LogScreen)
         self.table_screen = self.get_screen("table_screen", TableScreen)
         self.directory_scan_worker: Worker | None = None
+        self.video_files: dict[str, VideoFile] = dict()
 
     def on_mount(self) -> None:
         self.push_screen('log_screen')
@@ -400,12 +480,24 @@ class MyApp(App):
 
         self.push_screen(SelectDirectory(), _pick_directory_result)
 
+    @textual.on(DirectoryScanningComplete)
+    def directory_scanning_complete(self, directory_scanning_complete: DirectoryScanningComplete) -> None:
+        self.log_message(f'Directory scanning complete; checking for visible ProgressDialog')
+        if isinstance(self.screen, ProgressDialog):
+            self.log_message(f'Directory scanning complete; popping ProgressDialog')
+            self.pop_screen()
+
+    @textual.on(ShowMovieDetailsMessage)
+    def show_movie_details(self, show_movie_details_message: ShowMovieDetailsMessage) -> None:
+        self.log_message(f'Showing movie details: {show_movie_details_message.video_file.file_path}')
+        self.push_screen(ShowMovieDetails(show_movie_details_message.video_file))
+
     async def background_worker_task(self):
         count = 1
         while True:
             self.on_log_message(LogMessage(f'Background Worker Count = {count}'))
             count += 1
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(10.0)
 
 
 if __name__ == "__main__":
