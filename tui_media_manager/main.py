@@ -14,7 +14,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Vertical, Horizontal
 from textual.message import Message
 from textual.screen import Screen, ModalScreen
-from textual.widgets import DataTable, Label, ListItem, ListView, Log, Footer, Button, TextArea
+from textual.widgets import DataTable, Label, ListItem, ListView, Log, Footer, Button, Static
 from textual.worker import Worker, WorkerState
 
 from textual_fspicker import SelectDirectory
@@ -362,34 +362,42 @@ class ShowMovieDetails(ModalScreen):
     CSS = """
         ShowMovieDetails {
             align-horizontal: center;
-            align-vertical: middle;
             max-width: 80vw;
             max-height: 80vh;
-
+        
             & > Vertical {
                 width: auto;
                 height: auto;
-                border: round white;
-                padding: 1 2;
-
-                & > Label {
+                # padding: 1 2;
+                keyline: thin $primary;
+                offset-y: 25vh;
+                # background: yellow;
+        
+                & > #file_path_id {
                     width: auto;
-                    margin-bottom: 1;
+                    margin: 1;
+                    padding: 1 2 1 2;
+                    # background: blue;
                 }
-
-                & > TextArea {
+        
+                & > #plot_id {
                     width: 100%;
                     height: auto;
-                    margin-bottom: 1;
+                    margin: 1;
+                    padding: 1 2 1 2;
+                    # background: red;
                 }
-
+        
                 & > Horizontal {
                     width: 100%;
                     height: auto;
+                    margin: 1;
+                    padding: 1 2 1 2;
                     align-horizontal: right;
+                    # background: green;
                 }
             }
-        }   
+        }
      """
 
     def __init__(self, video_file: VideoFile):
@@ -398,8 +406,8 @@ class ShowMovieDetails(ModalScreen):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Label(f" {self.video_file.file_path}", id="file_path_id"),
-            TextArea(self.video_file.imdb_plot, read_only=True, id="message_id"),
+            Label(self.video_file.file_path, id="file_path_id"),
+            Label(self.video_file.imdb_plot, id="plot_id"),
             Horizontal(
                 Button('Refresh Details', compact=True, id='refresh_details_id'),
                 Button('Cancel', compact=True, id='cancel_id')
