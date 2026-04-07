@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 import asyncio
 import dataclasses
 import json
@@ -64,21 +65,16 @@ class LogMessage(Message):
         self.level = level
 
 
-# class DirectoryScanningComplete(Message):
-#     def __init__(self):
-#         super().__init__()
-
-
 # class ShowMovieDetailsMessage(Message):
 #     def __init__(self, video_file: VideoFile):
 #         super().__init__()
 #         self.video_file = video_file
 
 
-# class AddVideoFile(Message):
-#     def __init__(self, video_file: VideoFile):
-#         super().__init__()
-#         self.video_file = video_file
+class AddVideoFile(Message):
+    def __init__(self, video_file: VideoFile):
+        super().__init__()
+        self.video_file = video_file
 
 
 ####################
@@ -193,7 +189,7 @@ async def scan_folder(folder_path: Path,
 
         include_extensions_list = [ext.lower().strip() for ext in include_extensions.split(',')]
 
-        log_message_cb(f"Beginning processing of directory: {str(folder_path)}")
+        log_message_cb(f'Beginning processing of directory: {str(folder_path)}')
 
         for dir_path, dirs, files in os.walk(folder_path):
             for filename in files:
@@ -205,17 +201,17 @@ async def scan_folder(folder_path: Path,
                     filename_extension = filename_extension[1:]
 
                 if filename_extension.lower() not in include_extensions_list:
-                    log_message_cb(f"Ignoring file: {file_path}")
+                    log_message_cb(f'Ignoring file: {file_path}')
                     continue
 
                 scrubbed_video_file_name, year = scrub_video_file_name(filename_no_extension)
                 video_file = VideoFile(file_path=file_path, scrubbed_file_name=scrubbed_video_file_name, scrubbed_file_year=year)
 
-                log_message_cb(f"Getting IMDB info for video file: {file_path}")
+                log_message_cb(f'Getting IMDB info for video file: {file_path}')
                 imdb_info_list = await get_imdb_basic_info(video_file.scrubbed_file_name, video_file.scrubbed_file_year, num_matches=1)
                 imdb_info = imdb_info_list[0]
                 if imdb_info:
-                    log_message_cb(f"Found: tt={imdb_info.imdb_tt}, name={imdb_info.imdb_name}, year={imdb_info.imdb_year}")
+                    log_message_cb(f'Found: tt={imdb_info.imdb_tt}, name={imdb_info.imdb_name}, year={imdb_info.imdb_year}')
                     video_file.imdb_tt = imdb_info.imdb_tt
                     video_file.imdb_name = imdb_info.imdb_name
                     video_file.imdb_year = imdb_info.imdb_year
@@ -224,14 +220,14 @@ async def scan_folder(folder_path: Path,
                     video_file.imdb_plot = 'This is the plot\n\nMore plot details\n\nThe End.'
                     video_file.imdb_genres = imdb_info.imdb_genres
 
-                    log_message_cb(f"Processed video file: {file_path}")
+                    log_message_cb(f'Processed video file: {file_path}')
                     add_video_file_cb(video_file)
 
-        log_message_cb(f"End processing of directory: {str(folder_path)}")
+        log_message_cb(f'End processing of directory: {str(folder_path)}')
         scanning_complete_cb()
 
     except asyncio.CancelledError:
-        log_message_cb(f"Caught CancelledError while processing directory: {str(folder_path)}")
+        log_message_cb(f'Caught CancelledError while processing directory: {str(folder_path)}')
         scanning_complete_cb()
 
 
@@ -241,12 +237,12 @@ async def scan_folder(folder_path: Path,
 
 class MainMenu(ModalScreen):
     class MainMenuActions(StrEnum):
-        SHOW_TABLE_SCREEN = "Show Data Table"
-        SHOW_LOG_SCREEN = "Show Log"
-        LOAD_VIDEO_LIST = "Load Video Data"
-        SAVE_VIDEO_LIST = "Save Video Data"
-        PICK_A_DIRECTORY = "Pick a Directory"
-        STOP_DIRECTORY_SCAN = "Stop Directory Scan"
+        SHOW_TABLE_SCREEN = 'Show Data Table'
+        SHOW_LOG_SCREEN = 'Show Log'
+        LOAD_VIDEO_LIST = 'Load Video Data'
+        SAVE_VIDEO_LIST = 'Save Video Data'
+        PICK_A_DIRECTORY = 'Pick a Directory'
+        STOP_DIRECTORY_SCAN = 'Stop Directory Scan'
 
     CSS = """
          MainMenu {
@@ -266,7 +262,7 @@ class MainMenu(ModalScreen):
          }
      """
 
-    BINDINGS = [("escape", "cancel_menu", "Cancel Menu")]
+    BINDINGS = [('escape', 'cancel_menu', 'Cancel Menu')]
 
     def compose(self) -> ComposeResult:
         # Use a ListView so arrow keys can navigate up and down in the list
@@ -313,7 +309,7 @@ class TableScreen(Screen):
         self.video_files: dict[str, VideoFile] = dict()
 
     def compose(self) -> ComposeResult:
-        yield DataTable(show_header=True, cell_padding=2, header_height=1, cursor_type="row", id="video_files")
+        yield DataTable(show_header=True, cell_padding=2, header_height=1, cursor_type='row', id='video_files')
         yield Footer()
 
     def on_mount(self) -> None:
@@ -338,12 +334,12 @@ class TableScreen(Screen):
             data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_filename, key=video_file.file_path)
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        self.post_message(LogMessage(f"DataTable row selected: cursor_row={event.cursor_row}, key={event.row_key}"))
+        self.post_message(LogMessage(f'DataTable row selected: cursor_row={event.cursor_row}, key={event.row_key}'))
         table = self.query_one(DataTable)
         row_data = table.get_row_at(event.cursor_row)
-        self.post_message(LogMessage(f"DataTable row data by index: {row_data}"))
+        self.post_message(LogMessage(f'DataTable row data by index: {row_data}'))
         row_data = table.get_row(event.row_key)
-        self.post_message(LogMessage(f"DataTable row data by key: {row_data}"))
+        self.post_message(LogMessage(f'DataTable row data by key: {row_data}'))
 
         file_path = event.row_key.value
         video_file = self.video_files[file_path]
@@ -355,9 +351,9 @@ class TableScreen(Screen):
         self.post_message(LogMessage(f'Received ShowMovieDetails result: {button_id}'))
 
 
-class ProgressDialog(ModalScreen):
+class VideoFileScanner(ModalScreen):
     CSS = """
-        ProgressDialog {
+        VideoFileScanner {
             align-horizontal: center;
             
             & > Vertical {
@@ -381,22 +377,41 @@ class ProgressDialog(ModalScreen):
      """
 
     def __init__(self, directory_path: Path):
-        # super().__init__(self.CSS)
         super().__init__()
         self.directory_path = directory_path
+        self.directory_scan_worker = None
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Label(f"Scanning items in directory {self.directory_path}", id="message_id"),
+            Label(f'Scanning items in directory {self.directory_path}', id='message_id'),
             Horizontal(
                 Button('Cancel', compact=True, id='cancel_id')
             )
         )
 
-    @on(Button.Pressed)
+    def on_mount(self) -> None:
+        def _log_message(message: str) -> None:
+            self.post_message(LogMessage(message))
+
+        def _scanning_complete() -> None:
+            self.post_message(LogMessage(f'Directory scanning complete; checking for visible ProgressDialog'))
+            self.dismiss()
+
+        def _add_video_file(video_file: VideoFile) -> None:
+            self.post_message(AddVideoFile(video_file))
+
+        self.post_message(LogMessage(f'Starting worker to scan directory: {self.directory_path}'))
+        self.directory_scan_worker = self.run_worker(scan_folder(self.directory_path, _log_message, _scanning_complete, _add_video_file))
+        self.post_message(LogMessage(f'Started worker to scan directory: {self.directory_path}'))
+
+    @on(Button.Pressed, '#cancel_id')
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.post_message(LogMessage(f"ProgressDialog Button pressed"))
-        self.dismiss(True)
+        self.post_message(LogMessage(f'VideoFileScanner "Cancel" Button pressed'))
+
+        if self.directory_scan_worker and self.directory_scan_worker.state == WorkerState.RUNNING:
+            self.directory_scan_worker.cancel()
+
+        self.dismiss()
 
 
 class ShowMovieDetails(ModalScreen):
@@ -447,8 +462,8 @@ class ShowMovieDetails(ModalScreen):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Label(self.video_file.file_path, id="file_path_id"),
-            Label(self.video_file.imdb_plot, id="plot_id"),
+            Label(self.video_file.file_path, id='file_path_id'),
+            Label(self.video_file.imdb_plot, id='plot_id'),
             Horizontal(
                 Button('Refresh Details', compact=True, id='refresh_details_id'),
                 Button('Cancel', compact=True, id='cancel_id')
@@ -457,23 +472,23 @@ class ShowMovieDetails(ModalScreen):
 
     @on(Button.Pressed)
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.post_message(LogMessage(f"ShowMovieDetails Button {event.button.id} pressed"))
+        self.post_message(LogMessage(f'ShowMovieDetails Button {event.button.id} pressed'))
         if event.button.id == 'cancel_id':
             self.dismiss(event.button.id)
 
 
 class MyApp(App):
-    SCREENS = {"log_screen": LogScreen,
-               "table_screen": TableScreen, }
+    SCREENS = {'log_screen': LogScreen,
+               'table_screen': TableScreen, }
 
-    BINDINGS = [("m,escape", "show_main_menu", "Show Main Menu"),
+    BINDINGS = [('m,escape', 'show_main_menu', 'Show Main Menu'),
                 ('l', 'show_log_screen', 'Show Log Screen'),
                 ('f', 'show_data_screen', 'Show Data Screen'), ]
 
     def __init__(self):
         super().__init__()
-        self.log_screen = self.get_screen("log_screen", LogScreen)
-        self.table_screen = self.get_screen("table_screen", TableScreen)
+        self.log_screen = self.get_screen('log_screen', LogScreen)
+        self.table_screen = self.get_screen('table_screen', TableScreen)
         self.directory_scan_worker: Worker | None = None
         self.video_files: dict[str, VideoFile] = dict()
 
@@ -516,38 +531,39 @@ class MyApp(App):
         self.log_message(message.message)
 
     def log_message(self, message: str) -> None:
-        log_screen = self.get_screen("log_screen", LogScreen)
+        log_screen = self.get_screen('log_screen', LogScreen)
         log_screen.info(message)
 
     def pick_a_directory_and_start_scanning(self) -> None:
-        def _cancel_directory_scan(cancel_scan: bool) -> None:
-            if cancel_scan and self.directory_scan_worker and self.directory_scan_worker.state == WorkerState.RUNNING:
-                self.directory_scan_worker.cancel()
+        def _directory_scan_complete(result: Any) -> None:
+            pass
+            # if cancel_scan and self.directory_scan_worker and self.directory_scan_worker.state == WorkerState.RUNNING:
+            #     self.directory_scan_worker.cancel()
 
-        def _log_message(message: str) -> None:
-            self.log_message(message)
-
-        def _scanning_complete() -> None:
-            self.log_message(f'Directory scanning complete; checking for visible ProgressDialog')
-            if isinstance(self.screen, ProgressDialog):
-                self.log_message(f'Directory scanning complete; popping ProgressDialog')
-                self.pop_screen()
-
-        def _add_video_file(video_file: VideoFile) -> None:
-            if video_file.file_path not in self.video_files:
-                self.video_files[video_file.file_path] = video_file
-                self.log_message(f'Adding video file: {video_file.file_path}')
-                self.table_screen.add_video_file(video_file)
-            else:
-                self.log_message(f'Ignoring duplicate video file: {video_file.file_path}')
+        # def _log_message(message: str) -> None:
+        #     self.log_message(message)
+        #
+        # def _scanning_complete() -> None:
+        #     self.log_message(f'Directory scanning complete; checking for visible ProgressDialog')
+        #     if isinstance(self.screen, VideoFileScanner):
+        #         self.log_message(f'Directory scanning complete; popping ProgressDialog')
+        #         self.pop_screen()
+        #
+        # def _add_video_file(video_file: VideoFile) -> None:
+        #     if video_file.file_path not in self.video_files:
+        #         self.video_files[video_file.file_path] = video_file
+        #         self.log_message(f'Adding video file: {video_file.file_path}')
+        #         self.table_screen.add_video_file(video_file)
+        #     else:
+        #         self.log_message(f'Ignoring duplicate video file: {video_file.file_path}')
 
         def _pick_directory_result(directory_path: Path | None) -> Path | None:
             self.log_message(f'Selected directory: {directory_path}')
             if directory_path:
-                self.log_message(f'Starting worker to scan directory: {directory_path}')
-                self.directory_scan_worker = self.run_worker(scan_folder(directory_path, _log_message, _scanning_complete, _add_video_file))
-                self.log_message(f'Started worker to scan directory: {directory_path}')
-                self.push_screen(ProgressDialog(directory_path), _cancel_directory_scan)
+                # self.log_message(f'Starting worker to scan directory: {directory_path}')
+                # self.directory_scan_worker = self.run_worker(scan_folder(directory_path, _log_message, _scanning_complete, _add_video_file))
+                # self.log_message(f'Started worker to scan directory: {directory_path}')
+                self.push_screen(VideoFileScanner(directory_path), _directory_scan_complete)
 
         self.push_screen(SelectDirectory(), _pick_directory_result)
 
@@ -580,21 +596,14 @@ class MyApp(App):
 
         self.push_screen(FileSave(), _file_save_result)
 
-    # @textual.on(DirectoryScanningComplete)
-    # def handle_directory_scanning_complete(self, directory_scanning_complete: DirectoryScanningComplete) -> None:
-    #     self.log_message(f'Directory scanning complete; checking for visible ProgressDialog')
-    #     if isinstance(self.screen, ProgressDialog):
-    #         self.log_message(f'Directory scanning complete; popping ProgressDialog')
-    #         self.pop_screen()
-
-    # @textual.on(AddVideoFile)
-    # def handle_add_video_file(self, add_video_file: AddVideoFile) -> None:
-    #     if add_video_file.video_file.file_path not in self.video_files:
-    #         self.video_files[add_video_file.video_file.file_path] = add_video_file.video_file
-    #         self.log_message(f'Adding video file: {add_video_file.video_file.file_path}')
-    #         self.table_screen.add_video_file(add_video_file.video_file)
-    #     else:
-    #         self.log_message(f'Ignoring duplicate video file: {add_video_file.video_file.file_path}')
+    @textual.on(AddVideoFile)
+    def handle_add_video_file(self, add_video_file: AddVideoFile) -> None:
+        if add_video_file.video_file.file_path not in self.video_files:
+            self.video_files[add_video_file.video_file.file_path] = add_video_file.video_file
+            self.log_message(f'Adding video file: {add_video_file.video_file.file_path}')
+            self.table_screen.add_video_file(add_video_file.video_file)
+        else:
+            self.log_message(f'Ignoring duplicate video file: {add_video_file.video_file.file_path}')
 
     # @textual.on(ShowMovieDetailsMessage)
     # def show_movie_details(self, show_movie_details_message: ShowMovieDetailsMessage) -> None:
@@ -609,6 +618,6 @@ class MyApp(App):
             await asyncio.sleep(10.0)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     app = MyApp()
     app.run()
