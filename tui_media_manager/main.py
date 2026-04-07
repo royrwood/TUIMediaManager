@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
 import asyncio
@@ -7,23 +8,26 @@ import logging
 import os
 import re
 
-import aiohttp
-import textual
 from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Vertical, Horizontal
 from textual.message import Message
 from textual.screen import Screen, ModalScreen
-from textual.widgets import DataTable, Label, ListItem, ListView, Log, Footer, Button, Static
+from textual.widgets import DataTable, Label, ListItem, ListView, Log, Footer, Button
 from textual.worker import Worker, WorkerState
-
-from textual_fspicker import SelectDirectory
+from textual_fspicker import SelectDirectory, FileOpen
+import aiohttp
+import textual
 
 
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(filename='tui_media_manager.log', encoding='utf-8', level=logging.INFO)
 LOGGER.info('Starting up...')
 
+
+###############
+# Data classes
+###############
 
 @dataclasses.dataclass
 class VideoFile:
@@ -49,12 +53,9 @@ class IMDBInfo:
     imdb_plot: str = ''
 
 
-class MainMenuActions(StrEnum):
-    SHOW_TABLE_SCREEN = "Show Data Table"
-    SHOW_LOG_SCREEN = "Show Log"
-    PICK_A_DIRECTORY = "Pick a Directory"
-    STOP_DIRECTORY_SCAN = "Stop Directory Scan"
-
+##################
+# Message Classes
+##################
 
 class LogMessage(Message):
     def __init__(self, message: str, level=0):
@@ -74,7 +75,175 @@ class ShowMovieDetailsMessage(Message):
         self.video_file = video_file
 
 
+class AddVideoFile(Message):
+    def __init__(self, video_file: VideoFile):
+        super().__init__()
+        self.video_file = video_file
+
+
+####################
+# Utility Functions
+####################
+
+def scrub_video_file_name(file_name: str, filename_metadata_tokens: str = None) -> tuple[str, str]:
+    if filename_metadata_tokens is None:
+        filename_metadata_tokens = '480p,720p,1080p,bluray,hevc,x265,x264,web,webrip,web-dl,repack,proper,extended,remastered,dvdrip,dvd,hdtv,xvid,hdrip,brrip,dvdscr,pdtv'
+
+    year = ''
+
+    match = re.match(r'((.*)\((\d{4})\))', file_name)
+    if match:
+        file_name = match.group(2)
+        year = match.group(3)
+        scrubbed_file_name_list = file_name.replace('.', ' ').split()
+
+    else:
+        metadata_token_list = [token.lower().strip() for token in filename_metadata_tokens.split(',')]
+        file_name_parts = file_name.replace('.', ' ').split()
+        scrubbed_file_name_list = list()
+
+        for file_name_part in file_name_parts:
+            file_name_part = file_name_part.lower()
+
+            if file_name_part in metadata_token_list:
+                break
+            scrubbed_file_name_list.append(file_name_part)
+
+        if scrubbed_file_name_list:
+            match = re.match(r'\(?(\d{4})\)?', scrubbed_file_name_list[-1])
+            if match:
+                year = match.group(1)
+                del scrubbed_file_name_list[-1]
+
+    scrubbed_file_name = ' '.join(scrubbed_file_name_list).strip()
+    scrubbed_file_name = re.sub(' +', ' ', scrubbed_file_name)
+    return scrubbed_file_name, year
+
+
+async def get_imdb_basic_info(video_name: str, year: str | None, post_log_message: Callable[[LogMessage], bool], num_matches: int = 1) -> list[IMDBInfo]:
+    # curl -s -H 'Content-Type: application/json' -d @imdb_graphql_simple.json 'https://api.graphql.imdb.com/'
+
+    year = '' if year is None else year
+
+    # This is the GraphQL-- it is not JSON!
+    imdb_graphql = f"""
+        query {{
+          mainSearch(
+            first: {num_matches}
+            options: {{
+              searchTerm: "{video_name} {year}"
+              isExactMatch: false
+              type: [TITLE]
+              titleSearchOptions: {{ type: [MOVIE] }}
+            }}
+          ) {{
+            edges {{
+              node {{
+                entity {{
+                  ... on Title {{
+                    __typename
+                    id
+                    titleText {{ text }}
+                    canonicalUrl
+                    originalTitleText {{ text }}
+                    releaseDate {{ year month day }}
+                    primaryImage {{ url }}
+                    titleType {{ id text categories {{ id text value }} }}
+                    ratingsSummary {{ aggregateRating }}
+                    runtime {{ seconds }}
+                  }}
+                }}
+              }}
+            }}
+          }}
+        }}
+    """
+    # Now pack the GraphQL as a string in a JSON object
+    imdb_graphql_json = {'query': imdb_graphql}
+    headers = {'Content-Type': 'application/json'}
+    url = 'https://api.graphql.imdb.com/'
+
+    async with aiohttp.ClientSession() as session:
+        post_log_message(LogMessage(f"Getting IMDB basic info for {video_name} {year}"))
+
+        async with session.post(url, headers=headers, json=imdb_graphql_json, timeout=30) as imdb_response:
+            if imdb_response.status < 200 or imdb_response.status >= 300:
+                raise Exception(f'HTTP {imdb_response.status} while fetching search results for {video_name}')
+            else:
+                imdb_response_text = await imdb_response.text()
+                imdb_response_json = json.loads(imdb_response_text)
+                edges = imdb_response_json['data']['mainSearch']['edges']
+                imdb_info_list = list()
+                for edge in edges:
+                    edge_node_entity = edge['node']['entity']
+                    imdb_info = IMDBInfo()
+                    imdb_info.imdb_tt = edge_node_entity['id']
+                    imdb_info.imdb_name = edge_node_entity['titleText']['text']
+                    imdb_info.imdb_year = str(edge_node_entity['releaseDate']['year'])
+                    imdb_info_list.append(imdb_info)
+                    post_log_message(LogMessage(f"Found IMDB {imdb_info.imdb_tt} {imdb_info.imdb_name} ({imdb_info.imdb_year})"))
+                return imdb_info_list
+
+
+async def scan_folder(folder_path: Path, post_message: Callable[[Message], bool], include_extensions: str = None) -> None:
+    try:
+        if include_extensions is None:
+            include_extensions = 'mkv,mp4'
+
+        include_extensions_list = [ext.lower().strip() for ext in include_extensions.split(',')]
+
+        post_message(LogMessage(f"Beginning processing of directory: {str(folder_path)}"))
+
+        for dir_path, dirs, files in os.walk(folder_path):
+            for filename in files:
+                file_path = os.path.join(dir_path, filename)
+                filename_parts = os.path.splitext(filename)
+                filename_no_extension = filename_parts[0]
+                filename_extension = filename_parts[1]
+                if filename_extension.startswith('.'):
+                    filename_extension = filename_extension[1:]
+
+                if filename_extension.lower() not in include_extensions_list:
+                    continue
+
+                scrubbed_video_file_name, year = scrub_video_file_name(filename_no_extension)
+                video_file = VideoFile(file_path=file_path, scrubbed_file_name=scrubbed_video_file_name, scrubbed_file_year=year)
+
+                post_message(LogMessage(f"Getting IMDB info for video file: {file_path}"))
+                imdb_info_list = await get_imdb_basic_info(video_file.scrubbed_file_name, video_file.scrubbed_file_year, post_message, num_matches=1)
+                imdb_info = imdb_info_list[0]
+                if imdb_info:
+                    post_message(LogMessage(f"Found: tt={imdb_info.imdb_tt}, name={imdb_info.imdb_name}, year={imdb_info.imdb_year}"))
+                    video_file.imdb_tt = imdb_info.imdb_tt
+                    video_file.imdb_name = imdb_info.imdb_name
+                    video_file.imdb_year = imdb_info.imdb_year
+                    video_file.imdb_rating = imdb_info.imdb_rating
+                    video_file.imdb_plot = imdb_info.imdb_plot
+                    video_file.imdb_plot = 'This is the plot\n\nMore plot details\n\nThe End.'
+                    video_file.imdb_genres = imdb_info.imdb_genres
+
+                    post_message(LogMessage(f"Processed video file: {file_path}"))
+                    post_message(AddVideoFile(video_file))
+
+        post_message(LogMessage(f"End processing of directory: {str(folder_path)}"))
+        post_message(DirectoryScanningComplete())
+
+    except asyncio.CancelledError:
+        post_message(LogMessage(f"Caught CancelledError while processing directory: {str(folder_path)}"))
+
+
+#################
+# Screen Classes
+#################
+
 class MainMenu(ModalScreen):
+    class MainMenuActions(StrEnum):
+        SHOW_TABLE_SCREEN = "Show Data Table"
+        SHOW_LOG_SCREEN = "Show Log"
+        LOAD_VIDEO_LIST = "Load Video Data"
+        PICK_A_DIRECTORY = "Pick a Directory"
+        STOP_DIRECTORY_SCAN = "Stop Directory Scan"
+
     CSS = """
          MainMenu {
              align-horizontal: center;
@@ -98,12 +267,12 @@ class MainMenu(ModalScreen):
     def compose(self) -> ComposeResult:
         # Use a ListView so arrow keys can navigate up and down in the list
         with ListView():
-            for menu_action in MainMenuActions:
+            for menu_action in MainMenu.MainMenuActions:
                 yield ListItem(Label(str(menu_action.value)), id=menu_action.name)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         # main_menu_actions_enum = MainMenuActions[event.item.id]  # Pycharm linter complains about this because MainMenuActions is a StrEnum, not a plain Enum
-        main_menu_actions_enum = getattr(MainMenuActions, event.item.id)  # Pycharm linter likes this way of getting the enum by name-- FINE, WHATEVER.
+        main_menu_actions_enum = getattr(MainMenu.MainMenuActions, event.item.id)  # Pycharm linter likes this way of getting the enum by name-- FINE, WHATEVER.
         self.dismiss(main_menu_actions_enum)
 
     def action_cancel_menu(self) -> None:
@@ -166,152 +335,12 @@ class TableScreen(Screen):
 
         file_path = event.row_key.value
         video_file = self.video_files[file_path]
-        self.post_message(ShowMovieDetailsMessage(video_file))
+        # self.post_message(ShowMovieDetailsMessage(video_file))
 
-    @staticmethod
-    def scrub_video_file_name(file_name: str, filename_metadata_tokens: str = None) -> tuple[str, str]:
-        if filename_metadata_tokens is None:
-            filename_metadata_tokens = '480p,720p,1080p,bluray,hevc,x265,x264,web,webrip,web-dl,repack,proper,extended,remastered,dvdrip,dvd,hdtv,xvid,hdrip,brrip,dvdscr,pdtv'
+        self.app.push_screen(ShowMovieDetails(video_file), self.handle_movie_details_result)
 
-        year = ''
-
-        match = re.match(r'((.*)\((\d{4})\))', file_name)
-        if match:
-            file_name = match.group(2)
-            year = match.group(3)
-            scrubbed_file_name_list = file_name.replace('.', ' ').split()
-
-        else:
-            metadata_token_list = [token.lower().strip() for token in filename_metadata_tokens.split(',')]
-            file_name_parts = file_name.replace('.', ' ').split()
-            scrubbed_file_name_list = list()
-
-            for file_name_part in file_name_parts:
-                file_name_part = file_name_part.lower()
-
-                if file_name_part in metadata_token_list:
-                    break
-                scrubbed_file_name_list.append(file_name_part)
-
-            if scrubbed_file_name_list:
-                match = re.match(r'\(?(\d{4})\)?', scrubbed_file_name_list[-1])
-                if match:
-                    year = match.group(1)
-                    del scrubbed_file_name_list[-1]
-
-        scrubbed_file_name = ' '.join(scrubbed_file_name_list).strip()
-        scrubbed_file_name = re.sub(' +', ' ', scrubbed_file_name)
-        return scrubbed_file_name, year
-
-    async def get_imdb_basic_info(self, video_name: str, year: str | None, num_matches: int = 1) -> list[IMDBInfo]:
-        # curl -s -H 'Content-Type: application/json' -d @imdb_graphql_simple.json 'https://api.graphql.imdb.com/'
-
-        # This is the GraphQL-- it is not JSON!
-        imdb_graphql = f"""
-            query {{
-              mainSearch(
-                first: {num_matches}
-                options: {{
-                  searchTerm: "{video_name} {year}"
-                  isExactMatch: false
-                  type: [TITLE]
-                  titleSearchOptions: {{ type: [MOVIE] }}
-                }}
-              ) {{
-                edges {{
-                  node {{
-                    entity {{
-                      ... on Title {{
-                        __typename
-                        id
-                        titleText {{ text }}
-                        canonicalUrl
-                        originalTitleText {{ text }}
-                        releaseDate {{ year month day }}
-                        primaryImage {{ url }}
-                        titleType {{ id text categories {{ id text value }} }}
-                        ratingsSummary {{ aggregateRating }}
-                        runtime {{ seconds }}
-                      }}
-                    }}
-                  }}
-                }}
-              }}
-            }}
-        """
-        # Now pack the GraphQL as a string in a JSON object
-        imdb_graphql_json = {'query': imdb_graphql}
-        headers = {'Content-Type': 'application/json'}
-        url = 'https://api.graphql.imdb.com/'
-
-        async with aiohttp.ClientSession() as session:
-            self.post_message(LogMessage(f"Getting IMDB basic info for {video_name} {year}"))
-
-            async with session.post(url, headers=headers, json=imdb_graphql_json, timeout=30) as imdb_response:
-                if imdb_response.status < 200 or imdb_response.status >= 300:
-                    raise Exception(f'HTTP {imdb_response.status} while fetching search results for {video_name}')
-                else:
-                    imdb_response_text = await imdb_response.text()
-                    imdb_response_json = json.loads(imdb_response_text)
-                    edges = imdb_response_json['data']['mainSearch']['edges']
-                    imdb_info_list = list()
-                    for edge in edges:
-                        edge_node_entity = edge['node']['entity']
-                        imdb_info = IMDBInfo()
-                        imdb_info.imdb_tt = edge_node_entity['id']
-                        imdb_info.imdb_name = edge_node_entity['titleText']['text']
-                        imdb_info.imdb_year = str(edge_node_entity['releaseDate']['year'])
-                        imdb_info_list.append(imdb_info)
-                        self.post_message(LogMessage(f"Found IMDB {imdb_info.imdb_tt} {imdb_info.imdb_name} ({imdb_info.imdb_year})"))
-                    return imdb_info_list
-
-    async def scan_folder(self, folder_path: Path, include_extensions: str = None) -> None:
-        try:
-            if include_extensions is None:
-                include_extensions = 'mkv,mp4'
-
-            include_extensions_list = [ext.lower().strip() for ext in include_extensions.split(',')]
-
-            self.post_message(LogMessage(f"Beginning processing of directory: {str(folder_path)}"))
-
-            for dir_path, dirs, files in os.walk(folder_path):
-                for filename in files:
-                    file_path = os.path.join(dir_path, filename)
-                    filename_parts = os.path.splitext(filename)
-                    filename_no_extension = filename_parts[0]
-                    filename_extension = filename_parts[1]
-                    if filename_extension.startswith('.'):
-                        filename_extension = filename_extension[1:]
-
-                    if filename_extension.lower() not in include_extensions_list:
-                        continue
-
-                    scrubbed_video_file_name, year = self.scrub_video_file_name(filename_no_extension)
-                    video_file = VideoFile(file_path=file_path, scrubbed_file_name=scrubbed_video_file_name, scrubbed_file_year=year)
-
-                    self.post_message(LogMessage(f"Getting IMDB info for video file: {file_path}"))
-                    imdb_info_list = await self.get_imdb_basic_info(video_file.scrubbed_file_name, video_file.scrubbed_file_year, num_matches=1)
-                    imdb_info = imdb_info_list[0]
-                    if imdb_info:
-                        self.post_message(LogMessage(f"Found: tt={imdb_info.imdb_tt}, name={imdb_info.imdb_name}, year={imdb_info.imdb_year}"))
-                        video_file.imdb_tt = imdb_info.imdb_tt
-                        video_file.imdb_name = imdb_info.imdb_name
-                        video_file.imdb_year = imdb_info.imdb_year
-                        video_file.imdb_rating = imdb_info.imdb_rating
-                        video_file.imdb_plot = imdb_info.imdb_plot
-                        video_file.imdb_plot = 'This is the plot\n\nMore plot details\n\nThe End.'
-                        video_file.imdb_genres = imdb_info.imdb_genres
-
-                        self.post_message(LogMessage(f"Processed video file: {file_path}"))
-                        self.add_video_file(video_file)
-
-                    # await asyncio.sleep(5.0)
-
-            self.post_message(LogMessage(f"End processing of directory: {str(folder_path)}"))
-            self.post_message(DirectoryScanningComplete())
-
-        except asyncio.CancelledError:
-            self.post_message(LogMessage(f"Caught CancelledError while processing directory: {str(folder_path)}"))
+    def handle_movie_details_result(self, button_id: str) -> None:
+        self.post_message(LogMessage(f'Received ShowMovieDetails result: {button_id}'))
 
 
 class ProgressDialog(ModalScreen):
@@ -416,8 +445,9 @@ class ShowMovieDetails(ModalScreen):
 
     @on(Button.Pressed)
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.post_message(LogMessage(f"ProgressDialog Button pressed"))
-        self.dismiss(True)
+        self.post_message(LogMessage(f"ShowMovieDetails Button {event.button.id} pressed"))
+        if event.button.id == 'cancel_id':
+            self.dismiss(event.button.id)
 
 
 class MyApp(App):
@@ -442,28 +472,30 @@ class MyApp(App):
         self.action_show_main_menu()
 
     def action_show_main_menu(self):
+        def _do_main_menu_action(action: MainMenu.MainMenuActions | None) -> None:
+            if action is not None:
+                self.log_message(f'Received MainMenuAction = {action.name}')
+
+                if action == MainMenu.MainMenuActions.LOAD_VIDEO_LIST:
+                    self.load_video_files()
+                if action == MainMenu.MainMenuActions.PICK_A_DIRECTORY:
+                    self.pick_a_directory_and_start_scanning()
+                elif action == MainMenu.MainMenuActions.SHOW_LOG_SCREEN:
+                    self.switch_screen('log_screen')
+                elif action == MainMenu.MainMenuActions.SHOW_TABLE_SCREEN:
+                    self.switch_screen('table_screen')
+                elif action == MainMenu.MainMenuActions.STOP_DIRECTORY_SCAN:
+                    if self.directory_scan_worker and self.directory_scan_worker.state == WorkerState.RUNNING:
+                        self.directory_scan_worker.cancel()
+
         if not isinstance(self.screen, MainMenu):
-            self.push_screen(MainMenu(), self.do_main_menu_action)
+            self.push_screen(MainMenu(), _do_main_menu_action)
 
     def action_show_log_screen(self):
         self.switch_screen('log_screen')
 
     def action_show_data_screen(self):
         self.switch_screen('table_screen')
-
-    def do_main_menu_action(self, action: MainMenuActions | None) -> None:
-        if action is not None:
-            self.log_message(f'Received MainMenuAction = {action.name}')
-
-            if action == MainMenuActions.PICK_A_DIRECTORY:
-                self.pick_a_directory_and_start_scanning()
-            elif action == MainMenuActions.SHOW_LOG_SCREEN:
-                self.switch_screen('log_screen')
-            elif action == MainMenuActions.SHOW_TABLE_SCREEN:
-                self.switch_screen('table_screen')
-            elif action == MainMenuActions.STOP_DIRECTORY_SCAN:
-                if self.directory_scan_worker and self.directory_scan_worker.state == WorkerState.RUNNING:
-                    self.directory_scan_worker.cancel()
 
     @textual.on(LogMessage)
     def on_log_message(self, message: LogMessage) -> None:
@@ -482,23 +514,40 @@ class MyApp(App):
             self.log_message(f'Selected directory: {directory_path}')
             if directory_path:
                 self.log_message(f'Starting worker to scan directory: {directory_path}')
-                self.directory_scan_worker = self.run_worker(self.table_screen.scan_folder(directory_path))
+                self.directory_scan_worker = self.run_worker(scan_folder(directory_path, self.post_message))
                 self.log_message(f'Started worker to scan directory: {directory_path}')
                 self.push_screen(ProgressDialog(directory_path), _cancel_directory_scan)
 
         self.push_screen(SelectDirectory(), _pick_directory_result)
 
+    def load_video_files(self):
+        def _file_open_result(file_path: Path | None) -> Path | None:
+            self.log_message(f'Selected file: {file_path}')
+            if file_path:
+                pass
+
+        self.push_screen(FileOpen(), _file_open_result)
+
     @textual.on(DirectoryScanningComplete)
-    def directory_scanning_complete(self, directory_scanning_complete: DirectoryScanningComplete) -> None:
+    def handle_directory_scanning_complete(self, directory_scanning_complete: DirectoryScanningComplete) -> None:
         self.log_message(f'Directory scanning complete; checking for visible ProgressDialog')
         if isinstance(self.screen, ProgressDialog):
             self.log_message(f'Directory scanning complete; popping ProgressDialog')
             self.pop_screen()
 
-    @textual.on(ShowMovieDetailsMessage)
-    def show_movie_details(self, show_movie_details_message: ShowMovieDetailsMessage) -> None:
-        self.log_message(f'Showing movie details: {show_movie_details_message.video_file.file_path}')
-        self.push_screen(ShowMovieDetails(show_movie_details_message.video_file))
+    @textual.on(AddVideoFile)
+    def handle_add_video_file(self, add_video_file: AddVideoFile) -> None:
+        if add_video_file.video_file.file_path not in self.video_files:
+            self.video_files[add_video_file.video_file.file_path] = add_video_file.video_file
+            self.log_message(f'Adding video file: {add_video_file.video_file.file_path}')
+            self.table_screen.add_video_file(add_video_file.video_file)
+        else:
+            self.log_message(f'Ignoring duplicate video file: {add_video_file.video_file.file_path}')
+
+    # @textual.on(ShowMovieDetailsMessage)
+    # def show_movie_details(self, show_movie_details_message: ShowMovieDetailsMessage) -> None:
+    #     self.log_message(f'Showing movie details: {show_movie_details_message.video_file.file_path}')
+    #     self.push_screen(ShowMovieDetails(show_movie_details_message.video_file))
 
     async def background_worker_task(self):
         count = 1
