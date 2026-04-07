@@ -15,7 +15,7 @@ from textual.message import Message
 from textual.screen import Screen, ModalScreen
 from textual.widgets import DataTable, Label, ListItem, ListView, Log, Footer, Button
 from textual.worker import Worker, WorkerState
-from textual_fspicker import SelectDirectory, FileOpen
+from textual_fspicker import SelectDirectory, FileOpen, FileSave
 import aiohttp
 import textual
 
@@ -241,6 +241,7 @@ class MainMenu(ModalScreen):
         SHOW_TABLE_SCREEN = "Show Data Table"
         SHOW_LOG_SCREEN = "Show Log"
         LOAD_VIDEO_LIST = "Load Video Data"
+        SAVE_VIDEO_LIST = "Save Video Data"
         PICK_A_DIRECTORY = "Pick a Directory"
         STOP_DIRECTORY_SCAN = "Stop Directory Scan"
 
@@ -316,6 +317,14 @@ class TableScreen(Screen):
         table = self.query_one(DataTable)
         table.add_columns('IMDB', 'Name', 'Year', 'File')
         # table.add_row('', '', '', '')
+
+    def set_video_data(self, video_files: dict[str, VideoFile]) -> None:
+        self.video_files = video_files
+        data_table = self.query_one(DataTable)
+        data_table.clear()
+        for video_file in video_files.values():
+            video_filename = Path(video_file.file_path).name
+            data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_filename, key=video_file.file_path)
 
     def add_video_file(self, video_file: VideoFile):
         if video_file.file_path not in self.video_files:
@@ -476,9 +485,11 @@ class MyApp(App):
             if action is not None:
                 self.log_message(f'Received MainMenuAction = {action.name}')
 
-                if action == MainMenu.MainMenuActions.LOAD_VIDEO_LIST:
+                if action == MainMenu.MainMenuActions.SAVE_VIDEO_LIST:
+                    self.save_video_files()
+                elif action == MainMenu.MainMenuActions.LOAD_VIDEO_LIST:
                     self.load_video_files()
-                if action == MainMenu.MainMenuActions.PICK_A_DIRECTORY:
+                elif action == MainMenu.MainMenuActions.PICK_A_DIRECTORY:
                     self.pick_a_directory_and_start_scanning()
                 elif action == MainMenu.MainMenuActions.SHOW_LOG_SCREEN:
                     self.switch_screen('log_screen')
@@ -522,11 +533,32 @@ class MyApp(App):
 
     def load_video_files(self):
         def _file_open_result(file_path: Path | None) -> Path | None:
-            self.log_message(f'Selected file: {file_path}')
+            self.log_message(f'Selected Load File: {file_path}')
             if file_path:
-                pass
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    video_files_json = json.load(file)
+                self.video_files = dict()
+                for video_file_dict in video_files_json:
+                    video_file_path = video_file_dict['file_path']
+                    self.video_files[video_file_path] = VideoFile(**video_file_dict)
+                self.table_screen.set_video_data(self.video_files)
 
         self.push_screen(FileOpen(), _file_open_result)
+
+    def save_video_files(self):
+        def _file_save_result(file_path: Path | None) -> Path | None:
+            self.log_message(f'Selected Save File: {file_path}')
+            if file_path:
+                with open(file_path, 'w', encoding='utf-8') as file:
+                    file.write('[\n')
+                    for i, video_file in enumerate(self.video_files.values()):
+                        if i > 0:
+                            file.write(',\n')
+                        video_file_json = '  ' + json.dumps(dataclasses.asdict(video_file), ensure_ascii=False)
+                        file.write(video_file_json)
+                    file.write('\n]\n')
+
+        self.push_screen(FileSave(), _file_save_result)
 
     @textual.on(DirectoryScanningComplete)
     def handle_directory_scanning_complete(self, directory_scanning_complete: DirectoryScanningComplete) -> None:
