@@ -1,7 +1,6 @@
 from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
 import asyncio
 import dataclasses
 import json
@@ -376,10 +375,11 @@ class VideoFileScanner(ModalScreen):
         }   
      """
 
-    def __init__(self, directory_path: Path):
+    def __init__(self, directory_path: Path, add_video_file_cb: Callable[[VideoFile], None]):
         super().__init__()
         self.directory_path = directory_path
         self.directory_scan_worker = None
+        self.add_video_file_cb = add_video_file_cb
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -394,24 +394,28 @@ class VideoFileScanner(ModalScreen):
             self.post_message(LogMessage(message))
 
         def _scanning_complete() -> None:
-            self.post_message(LogMessage(f'Directory scanning complete; checking for visible ProgressDialog'))
+            self.post_message(LogMessage(f'Directory scanning complete; dismissing VideoFileScanner'))
             self.dismiss()
 
         def _add_video_file(video_file: VideoFile) -> None:
-            self.post_message(AddVideoFile(video_file))
+            if self.add_video_file_cb:
+                self.add_video_file_cb(video_file)
 
-        self.post_message(LogMessage(f'Starting worker to scan directory: {self.directory_path}'))
+        self.post_message(LogMessage(f'Starting worker to scan directory {self.directory_path}...'))
         self.directory_scan_worker = self.run_worker(scan_folder(self.directory_path, _log_message, _scanning_complete, _add_video_file))
-        self.post_message(LogMessage(f'Started worker to scan directory: {self.directory_path}'))
+        self.post_message(LogMessage(f'Started worker to scan directory {self.directory_path}'))
 
     @on(Button.Pressed, '#cancel_id')
     def on_button_pressed(self, event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'VideoFileScanner "Cancel" Button pressed'))
 
         if self.directory_scan_worker and self.directory_scan_worker.state == WorkerState.RUNNING:
+            self.post_message(LogMessage(f'VideoFileScanner cancelling worker...'))
             self.directory_scan_worker.cancel()
+            self.post_message(LogMessage(f'VideoFileScanner worker cancelled'))
 
-        self.dismiss()
+        # I don't think we need to dismiss, since canceling the worker will trigger a call to _scanning_complete(), and that calls self.dismiss()
+        # self.dismiss()
 
 
 class ShowMovieDetails(ModalScreen):
@@ -535,35 +539,18 @@ class MyApp(App):
         log_screen.info(message)
 
     def pick_a_directory_and_start_scanning(self) -> None:
-        def _directory_scan_complete(result: Any) -> None:
-            pass
-            # if cancel_scan and self.directory_scan_worker and self.directory_scan_worker.state == WorkerState.RUNNING:
-            #     self.directory_scan_worker.cancel()
-
-        # def _log_message(message: str) -> None:
-        #     self.log_message(message)
-        #
-        # def _scanning_complete() -> None:
-        #     self.log_message(f'Directory scanning complete; checking for visible ProgressDialog')
-        #     if isinstance(self.screen, VideoFileScanner):
-        #         self.log_message(f'Directory scanning complete; popping ProgressDialog')
-        #         self.pop_screen()
-        #
-        # def _add_video_file(video_file: VideoFile) -> None:
-        #     if video_file.file_path not in self.video_files:
-        #         self.video_files[video_file.file_path] = video_file
-        #         self.log_message(f'Adding video file: {video_file.file_path}')
-        #         self.table_screen.add_video_file(video_file)
-        #     else:
-        #         self.log_message(f'Ignoring duplicate video file: {video_file.file_path}')
+        def _add_video_file(video_file: VideoFile) -> None:
+            if video_file.file_path not in self.video_files:
+                self.video_files[video_file.file_path] = video_file
+                self.log_message(f'Adding video file: {video_file.file_path}')
+                self.table_screen.add_video_file(video_file)
+            else:
+                self.log_message(f'Ignoring duplicate video file: {video_file.file_path}')
 
         def _pick_directory_result(directory_path: Path | None) -> Path | None:
             self.log_message(f'Selected directory: {directory_path}')
             if directory_path:
-                # self.log_message(f'Starting worker to scan directory: {directory_path}')
-                # self.directory_scan_worker = self.run_worker(scan_folder(directory_path, _log_message, _scanning_complete, _add_video_file))
-                # self.log_message(f'Started worker to scan directory: {directory_path}')
-                self.push_screen(VideoFileScanner(directory_path), _directory_scan_complete)
+                self.push_screen(VideoFileScanner(directory_path, _add_video_file))
 
         self.push_screen(SelectDirectory(), _pick_directory_result)
 
@@ -595,15 +582,6 @@ class MyApp(App):
                     file.write('\n]\n')
 
         self.push_screen(FileSave(), _file_save_result)
-
-    @textual.on(AddVideoFile)
-    def handle_add_video_file(self, add_video_file: AddVideoFile) -> None:
-        if add_video_file.video_file.file_path not in self.video_files:
-            self.video_files[add_video_file.video_file.file_path] = add_video_file.video_file
-            self.log_message(f'Adding video file: {add_video_file.video_file.file_path}')
-            self.table_screen.add_video_file(add_video_file.video_file)
-        else:
-            self.log_message(f'Ignoring duplicate video file: {add_video_file.video_file.file_path}')
 
     # @textual.on(ShowMovieDetailsMessage)
     # def show_movie_details(self, show_movie_details_message: ShowMovieDetailsMessage) -> None:
