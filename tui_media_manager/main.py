@@ -64,21 +64,21 @@ class LogMessage(Message):
         self.level = level
 
 
-class DirectoryScanningComplete(Message):
-    def __init__(self):
-        super().__init__()
+# class DirectoryScanningComplete(Message):
+#     def __init__(self):
+#         super().__init__()
 
 
-class ShowMovieDetailsMessage(Message):
-    def __init__(self, video_file: VideoFile):
-        super().__init__()
-        self.video_file = video_file
+# class ShowMovieDetailsMessage(Message):
+#     def __init__(self, video_file: VideoFile):
+#         super().__init__()
+#         self.video_file = video_file
 
 
-class AddVideoFile(Message):
-    def __init__(self, video_file: VideoFile):
-        super().__init__()
-        self.video_file = video_file
+# class AddVideoFile(Message):
+#     def __init__(self, video_file: VideoFile):
+#         super().__init__()
+#         self.video_file = video_file
 
 
 ####################
@@ -120,7 +120,7 @@ def scrub_video_file_name(file_name: str, filename_metadata_tokens: str = None) 
     return scrubbed_file_name, year
 
 
-async def get_imdb_basic_info(video_name: str, year: str | None, post_log_message: Callable[[LogMessage], bool], num_matches: int = 1) -> list[IMDBInfo]:
+async def get_imdb_basic_info(video_name: str, year: str | None, num_matches: int = 1) -> list[IMDBInfo]:
     # curl -s -H 'Content-Type: application/json' -d @imdb_graphql_simple.json 'https://api.graphql.imdb.com/'
 
     year = '' if year is None else year
@@ -164,8 +164,6 @@ async def get_imdb_basic_info(video_name: str, year: str | None, post_log_messag
     url = 'https://api.graphql.imdb.com/'
 
     async with aiohttp.ClientSession() as session:
-        post_log_message(LogMessage(f"Getting IMDB basic info for {video_name} {year}"))
-
         async with session.post(url, headers=headers, json=imdb_graphql_json, timeout=30) as imdb_response:
             if imdb_response.status < 200 or imdb_response.status >= 300:
                 raise Exception(f'HTTP {imdb_response.status} while fetching search results for {video_name}')
@@ -181,18 +179,21 @@ async def get_imdb_basic_info(video_name: str, year: str | None, post_log_messag
                     imdb_info.imdb_name = edge_node_entity['titleText']['text']
                     imdb_info.imdb_year = str(edge_node_entity['releaseDate']['year'])
                     imdb_info_list.append(imdb_info)
-                    post_log_message(LogMessage(f"Found IMDB {imdb_info.imdb_tt} {imdb_info.imdb_name} ({imdb_info.imdb_year})"))
                 return imdb_info_list
 
 
-async def scan_folder(folder_path: Path, post_message: Callable[[Message], bool], include_extensions: str = None) -> None:
+async def scan_folder(folder_path: Path,
+                      log_message_cb: Callable[[str], None],
+                      scanning_complete_cb: Callable[[], None],
+                      add_video_file_cb: Callable[[VideoFile], None],
+                      include_extensions: str = None) -> None:
     try:
         if include_extensions is None:
             include_extensions = 'mkv,mp4'
 
         include_extensions_list = [ext.lower().strip() for ext in include_extensions.split(',')]
 
-        post_message(LogMessage(f"Beginning processing of directory: {str(folder_path)}"))
+        log_message_cb(f"Beginning processing of directory: {str(folder_path)}")
 
         for dir_path, dirs, files in os.walk(folder_path):
             for filename in files:
@@ -204,16 +205,17 @@ async def scan_folder(folder_path: Path, post_message: Callable[[Message], bool]
                     filename_extension = filename_extension[1:]
 
                 if filename_extension.lower() not in include_extensions_list:
+                    log_message_cb(f"Ignoring file: {file_path}")
                     continue
 
                 scrubbed_video_file_name, year = scrub_video_file_name(filename_no_extension)
                 video_file = VideoFile(file_path=file_path, scrubbed_file_name=scrubbed_video_file_name, scrubbed_file_year=year)
 
-                post_message(LogMessage(f"Getting IMDB info for video file: {file_path}"))
-                imdb_info_list = await get_imdb_basic_info(video_file.scrubbed_file_name, video_file.scrubbed_file_year, post_message, num_matches=1)
+                log_message_cb(f"Getting IMDB info for video file: {file_path}")
+                imdb_info_list = await get_imdb_basic_info(video_file.scrubbed_file_name, video_file.scrubbed_file_year, num_matches=1)
                 imdb_info = imdb_info_list[0]
                 if imdb_info:
-                    post_message(LogMessage(f"Found: tt={imdb_info.imdb_tt}, name={imdb_info.imdb_name}, year={imdb_info.imdb_year}"))
+                    log_message_cb(f"Found: tt={imdb_info.imdb_tt}, name={imdb_info.imdb_name}, year={imdb_info.imdb_year}")
                     video_file.imdb_tt = imdb_info.imdb_tt
                     video_file.imdb_name = imdb_info.imdb_name
                     video_file.imdb_year = imdb_info.imdb_year
@@ -222,14 +224,15 @@ async def scan_folder(folder_path: Path, post_message: Callable[[Message], bool]
                     video_file.imdb_plot = 'This is the plot\n\nMore plot details\n\nThe End.'
                     video_file.imdb_genres = imdb_info.imdb_genres
 
-                    post_message(LogMessage(f"Processed video file: {file_path}"))
-                    post_message(AddVideoFile(video_file))
+                    log_message_cb(f"Processed video file: {file_path}")
+                    add_video_file_cb(video_file)
 
-        post_message(LogMessage(f"End processing of directory: {str(folder_path)}"))
-        post_message(DirectoryScanningComplete())
+        log_message_cb(f"End processing of directory: {str(folder_path)}")
+        scanning_complete_cb()
 
     except asyncio.CancelledError:
-        post_message(LogMessage(f"Caught CancelledError while processing directory: {str(folder_path)}"))
+        log_message_cb(f"Caught CancelledError while processing directory: {str(folder_path)}")
+        scanning_complete_cb()
 
 
 #################
@@ -521,11 +524,28 @@ class MyApp(App):
             if cancel_scan and self.directory_scan_worker and self.directory_scan_worker.state == WorkerState.RUNNING:
                 self.directory_scan_worker.cancel()
 
+        def _log_message(message: str) -> None:
+            self.log_message(message)
+
+        def _scanning_complete() -> None:
+            self.log_message(f'Directory scanning complete; checking for visible ProgressDialog')
+            if isinstance(self.screen, ProgressDialog):
+                self.log_message(f'Directory scanning complete; popping ProgressDialog')
+                self.pop_screen()
+
+        def _add_video_file(video_file: VideoFile) -> None:
+            if video_file.file_path not in self.video_files:
+                self.video_files[video_file.file_path] = video_file
+                self.log_message(f'Adding video file: {video_file.file_path}')
+                self.table_screen.add_video_file(video_file)
+            else:
+                self.log_message(f'Ignoring duplicate video file: {video_file.file_path}')
+
         def _pick_directory_result(directory_path: Path | None) -> Path | None:
             self.log_message(f'Selected directory: {directory_path}')
             if directory_path:
                 self.log_message(f'Starting worker to scan directory: {directory_path}')
-                self.directory_scan_worker = self.run_worker(scan_folder(directory_path, self.post_message))
+                self.directory_scan_worker = self.run_worker(scan_folder(directory_path, _log_message, _scanning_complete, _add_video_file))
                 self.log_message(f'Started worker to scan directory: {directory_path}')
                 self.push_screen(ProgressDialog(directory_path), _cancel_directory_scan)
 
@@ -560,21 +580,21 @@ class MyApp(App):
 
         self.push_screen(FileSave(), _file_save_result)
 
-    @textual.on(DirectoryScanningComplete)
-    def handle_directory_scanning_complete(self, directory_scanning_complete: DirectoryScanningComplete) -> None:
-        self.log_message(f'Directory scanning complete; checking for visible ProgressDialog')
-        if isinstance(self.screen, ProgressDialog):
-            self.log_message(f'Directory scanning complete; popping ProgressDialog')
-            self.pop_screen()
+    # @textual.on(DirectoryScanningComplete)
+    # def handle_directory_scanning_complete(self, directory_scanning_complete: DirectoryScanningComplete) -> None:
+    #     self.log_message(f'Directory scanning complete; checking for visible ProgressDialog')
+    #     if isinstance(self.screen, ProgressDialog):
+    #         self.log_message(f'Directory scanning complete; popping ProgressDialog')
+    #         self.pop_screen()
 
-    @textual.on(AddVideoFile)
-    def handle_add_video_file(self, add_video_file: AddVideoFile) -> None:
-        if add_video_file.video_file.file_path not in self.video_files:
-            self.video_files[add_video_file.video_file.file_path] = add_video_file.video_file
-            self.log_message(f'Adding video file: {add_video_file.video_file.file_path}')
-            self.table_screen.add_video_file(add_video_file.video_file)
-        else:
-            self.log_message(f'Ignoring duplicate video file: {add_video_file.video_file.file_path}')
+    # @textual.on(AddVideoFile)
+    # def handle_add_video_file(self, add_video_file: AddVideoFile) -> None:
+    #     if add_video_file.video_file.file_path not in self.video_files:
+    #         self.video_files[add_video_file.video_file.file_path] = add_video_file.video_file
+    #         self.log_message(f'Adding video file: {add_video_file.video_file.file_path}')
+    #         self.table_screen.add_video_file(add_video_file.video_file)
+    #     else:
+    #         self.log_message(f'Ignoring duplicate video file: {add_video_file.video_file.file_path}')
 
     # @textual.on(ShowMovieDetailsMessage)
     # def show_movie_details(self, show_movie_details_message: ShowMovieDetailsMessage) -> None:
