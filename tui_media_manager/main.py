@@ -8,6 +8,7 @@ import logging
 import os
 import re
 
+from imdbinfo import search_title, get_movie
 from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Vertical, Horizontal
@@ -228,6 +229,17 @@ async def scan_folder(folder_path: Path,
     except asyncio.CancelledError:
         log_message_cb(f'Caught CancelledError while processing directory: {str(folder_path)}')
         scanning_complete_cb()
+
+
+async def get_imdb_details(imdb_tt: str) -> IMDBInfo:
+    movie_details = await asyncio.to_thread(get_movie, imdb_tt)
+    imdb_info = IMDBInfo(imdb_tt=imdb_tt,
+                         imdb_name=movie_details.title_localized,
+                         imdb_year=str(movie_details.year),
+                         imdb_rating=str(movie_details.rating),
+                         imdb_plot=movie_details.plot,
+                         imdb_genres=movie_details.genres)
+    return imdb_info
 
 
 #################
@@ -463,22 +475,34 @@ class ShowMovieDetails(ModalScreen):
     def __init__(self, video_file: VideoFile):
         super().__init__()
         self.video_file = video_file
+        self.imdb_worker = None
 
     def compose(self) -> ComposeResult:
         yield Vertical(
             TextArea(self.video_file.file_path, read_only=True, show_cursor=False, id='file_path_id'),
             TextArea(self.video_file.imdb_plot, read_only=True, show_cursor=False, id='plot_id'),
             Horizontal(
-                Button('Refresh Details', compact=True, id='refresh_details_id'),
+                Button('Fetch Details', compact=True, id='fetch_details_id'),
+                Button('Search Title', compact=True, id='search_title_id'),
                 Button('Cancel', compact=True, id='cancel_id')
             )
         )
 
-    @on(Button.Pressed)
+    @on(Button.Pressed, '#cancel_id')
     def on_button_pressed(self, event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'ShowMovieDetails Button {event.button.id} pressed'))
-        if event.button.id == 'cancel_id':
-            self.dismiss(event.button.id)
+        self.dismiss(event.button.id)
+
+    @on(Button.Pressed, '#fetch_details_id')
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.post_message(LogMessage(f'ShowMovieDetails Button {event.button.id} pressed'))
+
+        self.post_message(LogMessage(f'Starting worker to fetch IMDB details for {self.video_file.imdb_tt}...'))
+        self.imdb_worker = self.run_worker(get_imdb_details(self.video_file.imdb_tt))
+        self.post_message(LogMessage(f'Started worker to fetch IMDB details for {self.video_file.imdb_tt}'))
+
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        self.post_message(LogMessage(f'ShowMovieDetails:on_worker_state_changed: state={event.state} result={self.imdb_worker.result}'))
 
 
 class MyApp(App):
@@ -499,7 +523,7 @@ class MyApp(App):
     def on_mount(self) -> None:
         self.push_screen('log_screen')
         self.push_screen('table_screen')
-        self.run_worker(self.background_worker_task())
+        # self.run_worker(self.background_worker_task())
         self.action_show_main_menu()
 
     def action_show_main_menu(self):
@@ -588,12 +612,12 @@ class MyApp(App):
     #     self.log_message(f'Showing movie details: {show_movie_details_message.video_file.file_path}')
     #     self.push_screen(ShowMovieDetails(show_movie_details_message.video_file))
 
-    async def background_worker_task(self):
-        count = 1
-        while True:
-            self.on_log_message(LogMessage(f'Background Worker Count = {count}'))
-            count += 1
-            await asyncio.sleep(10.0)
+    # async def background_worker_task(self):
+    #     count = 1
+    #     while True:
+    #         self.on_log_message(LogMessage(f'Background Worker Count = {count}'))
+    #         count += 1
+    #         await asyncio.sleep(10.0)
 
 
 if __name__ == '__main__':
