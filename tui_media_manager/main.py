@@ -13,7 +13,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Vertical, Horizontal
 from textual.message import Message
 from textual.screen import Screen, ModalScreen
-from textual.widgets import DataTable, Label, ListItem, ListView, Log, Footer, Button
+from textual.widgets import DataTable, Label, ListItem, ListView, Log, Footer, Button, TextArea
 from textual.worker import Worker, WorkerState
 from textual_fspicker import SelectDirectory, FileOpen, FileSave
 import aiohttp
@@ -422,21 +422,21 @@ class ShowMovieDetails(ModalScreen):
     CSS = """
         ShowMovieDetails {
             align-horizontal: center;
-            max-width: 80vw;
-            max-height: 80vh;
+            align-vertical: middle;
         
             & > Vertical {
-                width: auto;
+                width: 80vw;
                 height: auto;
                 # padding: 1 2;
                 keyline: thin $primary;
-                offset-y: 25vh;
+                # offset-y: 25vh;
                 # background: yellow;
         
                 & > #file_path_id {
-                    width: auto;
+                    width: 100%;
+                    height: auto;
                     margin: 1;
-                    padding: 1 2 1 2;
+                    # padding: 1 2 1 2;
                     # background: blue;
                 }
         
@@ -466,8 +466,8 @@ class ShowMovieDetails(ModalScreen):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Label(self.video_file.file_path, id='file_path_id'),
-            Label(self.video_file.imdb_plot, id='plot_id'),
+            TextArea(self.video_file.file_path, read_only=True, show_cursor=False, id='file_path_id'),
+            TextArea(self.video_file.imdb_plot, read_only=True, show_cursor=False, id='plot_id'),
             Horizontal(
                 Button('Refresh Details', compact=True, id='refresh_details_id'),
                 Button('Cancel', compact=True, id='cancel_id')
