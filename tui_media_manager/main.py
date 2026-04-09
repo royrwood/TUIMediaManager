@@ -488,21 +488,30 @@ class ShowMovieDetails(ModalScreen):
             )
         )
 
-    @on(Button.Pressed, '#cancel_id')
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.post_message(LogMessage(f'ShowMovieDetails Button {event.button.id} pressed'))
-        self.dismiss(event.button.id)
-
     @on(Button.Pressed, '#fetch_details_id')
-    def on_button_pressed(self, event: Button.Pressed) -> None:
+    def fetch_details_button_pressed(self, event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'ShowMovieDetails Button {event.button.id} pressed'))
 
         self.post_message(LogMessage(f'Starting worker to fetch IMDB details for {self.video_file.imdb_tt}...'))
         self.imdb_worker = self.run_worker(get_imdb_details(self.video_file.imdb_tt))
         self.post_message(LogMessage(f'Started worker to fetch IMDB details for {self.video_file.imdb_tt}'))
 
+    @on(Button.Pressed, '#search_title_id')
+    def search_title_button_pressed(self, event: Button.Pressed) -> None:
+        self.post_message(LogMessage(f'ShowMovieDetails Button {event.button.id} pressed'))
+
+    @on(Button.Pressed, '#cancel_id')
+    def cancel_button_pressed(self, event: Button.Pressed) -> None:
+        self.post_message(LogMessage(f'ShowMovieDetails Button {event.button.id} pressed'))
+        self.dismiss(event.button.id)
+
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
         self.post_message(LogMessage(f'ShowMovieDetails:on_worker_state_changed: state={event.state} result={self.imdb_worker.result}'))
+
+        if event.state == WorkerState.SUCCESS:
+            imdb_plot = self.imdb_worker.result.imdb_plot
+            text_area: TextArea = self.query_one('#plot_id', TextArea)
+            text_area.text = imdb_plot
 
 
 class MyApp(App):
