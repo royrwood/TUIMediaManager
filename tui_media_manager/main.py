@@ -253,7 +253,6 @@ class MainMenu(ModalScreen):
         LOAD_VIDEO_LIST = 'Load Video Data'
         SAVE_VIDEO_LIST = 'Save Video Data'
         PICK_A_DIRECTORY = 'Pick a Directory'
-        STOP_DIRECTORY_SCAN = 'Stop Directory Scan'
 
     CSS = """
          MainMenu {
@@ -314,7 +313,7 @@ class LogScreen(Screen):
         self.logger.write_line(message)
 
 
-class TableScreen(Screen):
+class VideoDataScreen(Screen):
     def __init__(self) -> None:
         super().__init__()
         self.video_files: dict[str, VideoFile] = dict()
@@ -327,6 +326,43 @@ class TableScreen(Screen):
         table = self.query_one(DataTable)
         table.add_columns('IMDB', 'Name', 'Year', 'File')
         # table.add_row('', '', '', '')
+
+    def load_video_files(self):
+        def _file_open_result(file_path: Path | None) -> Path | None:
+            self.post_message(LogMessage(f'Selected Load File: {file_path}'))
+            if file_path:
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    video_files_json = json.load(file)
+                self.video_files = dict()
+                for video_file_dict in video_files_json:
+                    video_file_path = video_file_dict['file_path']
+                    self.video_files[video_file_path] = VideoFile(**video_file_dict)
+                self.set_video_data(self.video_files)
+
+        self.app.push_screen(FileOpen(), _file_open_result)
+
+    def save_video_files(self):
+        def _file_save_result(file_path: Path | None) -> Path | None:
+            self.post_message(LogMessage(f'Selected Save File: {file_path}'))
+            if file_path:
+                with open(file_path, 'w', encoding='utf-8') as file:
+                    file.write('[\n')
+                    for i, video_file in enumerate(self.video_files.values()):
+                        if i > 0:
+                            file.write(',\n')
+                        video_file_json = '  ' + json.dumps(dataclasses.asdict(video_file), ensure_ascii=False)
+                        file.write(video_file_json)
+                    file.write('\n]\n')
+
+        self.app.push_screen(FileSave(), _file_save_result)
+
+    def pick_a_directory_and_start_scanning(self) -> None:
+        def _pick_directory_result(directory_path: Path | None) -> Path | None:
+            self.post_message(LogMessage(f'Selected directory: {directory_path}'))
+            if directory_path:
+                self.app.push_screen(VideoFileScannerModal(directory_path, self.add_video_file))
+
+        self.app.push_screen(SelectDirectory(), _pick_directory_result)
 
     def set_video_data(self, video_files: dict[str, VideoFile]) -> None:
         self.video_files = video_files
@@ -371,7 +407,7 @@ class VideoFileScannerModal(ModalScreen):
                 width: auto;
                 height: auto;
                 offset-y: 25vh;
-                border: round white;
+                border: round $primary;
                 padding: 1 2;
                 
                 & > Label {
@@ -439,7 +475,7 @@ class VideoContentFetchModal(ModalScreen[textual.worker.WorkerState]):
                 width: auto;
                 height: auto;
                 offset-y: 25vh;
-                border: round white;
+                border: round $primary;
                 padding: 1 2;
                 
                 & > Label {
@@ -573,7 +609,7 @@ class ShowMovieDetailsModal(ModalScreen[textual.worker.WorkerState]):
 
 class MyApp(App):
     SCREENS = {'log_screen': LogScreen,
-               'table_screen': TableScreen, }
+               'table_screen': VideoDataScreen, }
 
     BINDINGS = [('m,escape', 'show_main_menu', 'Show Main Menu'),
                 ('l', 'show_log_screen', 'Show Log Screen'),
@@ -582,8 +618,7 @@ class MyApp(App):
     def __init__(self):
         super().__init__()
         self.log_screen = self.get_screen('log_screen', LogScreen)
-        self.table_screen = self.get_screen('table_screen', TableScreen)
-        self.directory_scan_worker: Worker | None = None
+        self.table_screen = self.get_screen('table_screen', VideoDataScreen)
         self.video_files: dict[str, VideoFile] = dict()
 
     def on_mount(self) -> None:
@@ -598,18 +633,15 @@ class MyApp(App):
                 self.log_message(f'Received MainMenuAction = {action.name}')
 
                 if action == MainMenu.MainMenuActions.SAVE_VIDEO_LIST:
-                    self.save_video_files()
+                    self.table_screen.save_video_files()
                 elif action == MainMenu.MainMenuActions.LOAD_VIDEO_LIST:
-                    self.load_video_files()
+                    self.table_screen.load_video_files()
                 elif action == MainMenu.MainMenuActions.PICK_A_DIRECTORY:
-                    self.pick_a_directory_and_start_scanning()
+                    self.table_screen.pick_a_directory_and_start_scanning()
                 elif action == MainMenu.MainMenuActions.SHOW_LOG_SCREEN:
                     self.switch_screen('log_screen')
                 elif action == MainMenu.MainMenuActions.SHOW_TABLE_SCREEN:
                     self.switch_screen('table_screen')
-                elif action == MainMenu.MainMenuActions.STOP_DIRECTORY_SCAN:
-                    if self.directory_scan_worker and self.directory_scan_worker.state == WorkerState.RUNNING:
-                        self.directory_scan_worker.cancel()
 
         if not isinstance(self.screen, MainMenu):
             self.push_screen(MainMenu(), _do_main_menu_action)
@@ -627,56 +659,6 @@ class MyApp(App):
     def log_message(self, message: str) -> None:
         log_screen = self.get_screen('log_screen', LogScreen)
         log_screen.info(message)
-
-    def pick_a_directory_and_start_scanning(self) -> None:
-        def _add_video_file(video_file: VideoFile) -> None:
-            if video_file.file_path not in self.video_files:
-                self.video_files[video_file.file_path] = video_file
-                self.log_message(f'Adding video file: {video_file.file_path}')
-                self.table_screen.add_video_file(video_file)
-            else:
-                self.log_message(f'Ignoring duplicate video file: {video_file.file_path}')
-
-        def _pick_directory_result(directory_path: Path | None) -> Path | None:
-            self.log_message(f'Selected directory: {directory_path}')
-            if directory_path:
-                self.push_screen(VideoFileScannerModal(directory_path, _add_video_file))
-
-        self.push_screen(SelectDirectory(), _pick_directory_result)
-
-    def load_video_files(self):
-        def _file_open_result(file_path: Path | None) -> Path | None:
-            self.log_message(f'Selected Load File: {file_path}')
-            if file_path:
-                with open(file_path, 'r', encoding='utf-8') as file:
-                    video_files_json = json.load(file)
-                self.video_files = dict()
-                for video_file_dict in video_files_json:
-                    video_file_path = video_file_dict['file_path']
-                    self.video_files[video_file_path] = VideoFile(**video_file_dict)
-                self.table_screen.set_video_data(self.video_files)
-
-        self.push_screen(FileOpen(), _file_open_result)
-
-    def save_video_files(self):
-        def _file_save_result(file_path: Path | None) -> Path | None:
-            self.log_message(f'Selected Save File: {file_path}')
-            if file_path:
-                with open(file_path, 'w', encoding='utf-8') as file:
-                    file.write('[\n')
-                    for i, video_file in enumerate(self.video_files.values()):
-                        if i > 0:
-                            file.write(',\n')
-                        video_file_json = '  ' + json.dumps(dataclasses.asdict(video_file), ensure_ascii=False)
-                        file.write(video_file_json)
-                    file.write('\n]\n')
-
-        self.push_screen(FileSave(), _file_save_result)
-
-    # @textual.on(ShowMovieDetailsMessage)
-    # def show_movie_details(self, show_movie_details_message: ShowMovieDetailsMessage) -> None:
-    #     self.log_message(f'Showing movie details: {show_movie_details_message.video_file.file_path}')
-    #     self.push_screen(ShowMovieDetails(show_movie_details_message.video_file))
 
     # async def background_worker_task(self):
     #     count = 1
