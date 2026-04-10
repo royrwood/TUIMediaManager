@@ -358,8 +358,8 @@ class TableScreen(Screen):
 
         self.app.push_screen(ShowMovieDetailsModal(video_file), self.handle_movie_details_result)
 
-    def handle_movie_details_result(self, button_id: str) -> None:
-        self.post_message(LogMessage(f'Received ShowMovieDetails result: {button_id}'))
+    def handle_movie_details_result(self, worker_state: textual.worker.WorkerState) -> None:
+        self.post_message(LogMessage(f'Received ShowMovieDetails result: {worker_state}'))
 
 
 class VideoFileScannerModal(ModalScreen):
@@ -430,7 +430,7 @@ class VideoFileScannerModal(ModalScreen):
         # self.dismiss()
 
 
-class VideoContentFetchModal(ModalScreen):
+class VideoContentFetchModal(ModalScreen[textual.worker.WorkerState]):
     CSS = """
         VideoContentFetchModal {
             align-horizontal: center;
@@ -490,10 +490,10 @@ class VideoContentFetchModal(ModalScreen):
             self.video_file.imdb_plot = self.imdb_worker.result.imdb_plot
 
         if event.state in [WorkerState.CANCELLED, WorkerState.ERROR, WorkerState.SUCCESS]:
-            self.dismiss()
+            self.dismiss(event.state)
 
 
-class ShowMovieDetailsModal(ModalScreen):
+class ShowMovieDetailsModal(ModalScreen[textual.worker.WorkerState]):
     CSS = """
         ShowMovieDetailsModal {
             align-horizontal: center;
@@ -547,31 +547,28 @@ class ShowMovieDetailsModal(ModalScreen):
             Horizontal(
                 Button('Fetch Details', compact=True, id='fetch_details_id'),
                 Button('Search Title', compact=True, id='search_title_id'),
-                Button('Cancel', compact=True, id='cancel_id')
+                Button('OK', compact=True, id='ok_id')
             )
         )
 
     @on(Button.Pressed, '#fetch_details_id')
     def fetch_details_button_pressed(self, event: Button.Pressed) -> None:
+        def _video_content_fetch_complete_callback(worker_state: textual.worker.WorkerState) -> None:
+            if worker_state == WorkerState.SUCCESS:
+                text_area: TextArea = self.query_one('#plot_id', TextArea)
+                text_area.text = self.video_file.imdb_plot
+
         self.post_message(LogMessage(f'[ShowMovieDetailsModal] Button {event.button.id} pressed; showing VideoContentFetchModal'))
-        self.app.push_screen(VideoContentFetchModal(self.video_file))
+        self.app.push_screen(VideoContentFetchModal(self.video_file), _video_content_fetch_complete_callback)
 
     @on(Button.Pressed, '#search_title_id')
     def search_title_button_pressed(self, event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'[ShowMovieDetailsModal] Button {event.button.id} pressed'))
 
-    @on(Button.Pressed, '#cancel_id')
+    @on(Button.Pressed, '#ok_id')
     def cancel_button_pressed(self, event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'[ShowMovieDetailsModal] Button {event.button.id} pressed'))
-        self.dismiss(event.button.id)
-
-    # def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
-    #     self.post_message(LogMessage(f'ShowMovieDetails:on_worker_state_changed: state={event.state} result={self.imdb_worker.result}'))
-    #
-    #     if event.state == WorkerState.SUCCESS:
-    #         imdb_plot = self.imdb_worker.result.imdb_plot
-    #         text_area: TextArea = self.query_one('#plot_id', TextArea)
-    #         text_area.text = imdb_plot
+        self.dismiss(textual.worker.WorkerState.SUCCESS)
 
 
 class MyApp(App):
