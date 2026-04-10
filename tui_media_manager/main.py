@@ -356,15 +356,15 @@ class TableScreen(Screen):
         video_file = self.video_files[file_path]
         # self.post_message(ShowMovieDetailsMessage(video_file))
 
-        self.app.push_screen(ShowMovieDetails(video_file), self.handle_movie_details_result)
+        self.app.push_screen(ShowMovieDetailsModal(video_file), self.handle_movie_details_result)
 
     def handle_movie_details_result(self, button_id: str) -> None:
         self.post_message(LogMessage(f'Received ShowMovieDetails result: {button_id}'))
 
 
-class VideoFileScanner(ModalScreen):
+class VideoFileScannerModal(ModalScreen):
     CSS = """
-        VideoFileScanner {
+        VideoFileScannerModal {
             align-horizontal: center;
             
             & > Vertical {
@@ -406,7 +406,7 @@ class VideoFileScanner(ModalScreen):
             self.post_message(LogMessage(message))
 
         def _scanning_complete() -> None:
-            self.post_message(LogMessage(f'Directory scanning complete; dismissing VideoFileScanner'))
+            self.post_message(LogMessage(f'Directory scanning complete; dismissing VideoFileScannerModal'))
             self.dismiss()
 
         def _add_video_file(video_file: VideoFile) -> None:
@@ -419,20 +419,83 @@ class VideoFileScanner(ModalScreen):
 
     @on(Button.Pressed, '#cancel_id')
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.post_message(LogMessage(f'VideoFileScanner "Cancel" Button pressed'))
+        self.post_message(LogMessage(f'VideoFileScannerModal "Cancel" Button pressed'))
 
         if self.directory_scan_worker and self.directory_scan_worker.state == WorkerState.RUNNING:
-            self.post_message(LogMessage(f'VideoFileScanner cancelling worker...'))
+            self.post_message(LogMessage(f'VideoFileScannerModal cancelling worker...'))
             self.directory_scan_worker.cancel()
-            self.post_message(LogMessage(f'VideoFileScanner worker cancelled'))
+            self.post_message(LogMessage(f'VideoFileScannerModal worker cancelled'))
 
         # I don't think we need to dismiss, since canceling the worker will trigger a call to _scanning_complete(), and that calls self.dismiss()
         # self.dismiss()
 
 
-class ShowMovieDetails(ModalScreen):
+class VideoContentFetchModal(ModalScreen):
     CSS = """
-        ShowMovieDetails {
+        VideoContentFetchModal {
+            align-horizontal: center;
+            
+            & > Vertical {
+                width: auto;
+                height: auto;
+                offset-y: 25vh;
+                border: round white;
+                padding: 1 2;
+                
+                & > Label {
+                    margin-bottom: 1;
+                }
+                                
+                & > Horizontal {
+                    width: 100%;
+                    height: auto;
+                    align-horizontal: right;
+                }
+            }
+        }   
+     """
+
+    def __init__(self, video_file: VideoFile):
+        super().__init__()
+        self.video_file = video_file
+        self.imdb_worker = None
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label(f'Fetching IMDB info for {self.video_file.imdb_name} [{self.video_file.imdb_tt}]', id='message_id'),
+            Horizontal(
+                Button('Cancel', compact=True, id='cancel_id')
+            )
+        )
+
+    def on_mount(self) -> None:
+        self.post_message(LogMessage(f'[VideoContentFetchModal] Starting worker to fetch IMDB details for {self.video_file.imdb_tt}...'))
+        self.imdb_worker = self.run_worker(get_imdb_details(self.video_file.imdb_tt))
+        self.post_message(LogMessage(f'[VideoContentFetchModal] Started worker to fetch IMDB details for {self.video_file.imdb_tt}'))
+
+    @on(Button.Pressed, '#cancel_id')
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.post_message(LogMessage(f'[VideoContentFetchModal] "Cancel" Button pressed'))
+
+        if self.imdb_worker and self.imdb_worker.state == WorkerState.RUNNING:
+            self.post_message(LogMessage(f'[VideoContentFetchModal] cancelling worker...'))
+            self.imdb_worker.cancel()
+            self.post_message(LogMessage(f'[VideoContentFetchModal] worker cancelled'))
+
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        self.post_message(LogMessage(f'[VideoContentFetchModal] Received worker state change event: state={event.state}'))
+
+        if event.state == WorkerState.SUCCESS:
+            self.post_message(LogMessage(f'[VideoContentFetchModal] Final worker result: result={self.imdb_worker.result}'))
+            self.video_file.imdb_plot = self.imdb_worker.result.imdb_plot
+
+        if event.state in [WorkerState.CANCELLED, WorkerState.ERROR, WorkerState.SUCCESS]:
+            self.dismiss()
+
+
+class ShowMovieDetailsModal(ModalScreen):
+    CSS = """
+        ShowMovieDetailsModal {
             align-horizontal: center;
             align-vertical: middle;
         
@@ -490,28 +553,25 @@ class ShowMovieDetails(ModalScreen):
 
     @on(Button.Pressed, '#fetch_details_id')
     def fetch_details_button_pressed(self, event: Button.Pressed) -> None:
-        self.post_message(LogMessage(f'ShowMovieDetails Button {event.button.id} pressed'))
-
-        self.post_message(LogMessage(f'Starting worker to fetch IMDB details for {self.video_file.imdb_tt}...'))
-        self.imdb_worker = self.run_worker(get_imdb_details(self.video_file.imdb_tt))
-        self.post_message(LogMessage(f'Started worker to fetch IMDB details for {self.video_file.imdb_tt}'))
+        self.post_message(LogMessage(f'[ShowMovieDetailsModal] Button {event.button.id} pressed; showing VideoContentFetchModal'))
+        self.app.push_screen(VideoContentFetchModal(self.video_file))
 
     @on(Button.Pressed, '#search_title_id')
     def search_title_button_pressed(self, event: Button.Pressed) -> None:
-        self.post_message(LogMessage(f'ShowMovieDetails Button {event.button.id} pressed'))
+        self.post_message(LogMessage(f'[ShowMovieDetailsModal] Button {event.button.id} pressed'))
 
     @on(Button.Pressed, '#cancel_id')
     def cancel_button_pressed(self, event: Button.Pressed) -> None:
-        self.post_message(LogMessage(f'ShowMovieDetails Button {event.button.id} pressed'))
+        self.post_message(LogMessage(f'[ShowMovieDetailsModal] Button {event.button.id} pressed'))
         self.dismiss(event.button.id)
 
-    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
-        self.post_message(LogMessage(f'ShowMovieDetails:on_worker_state_changed: state={event.state} result={self.imdb_worker.result}'))
-
-        if event.state == WorkerState.SUCCESS:
-            imdb_plot = self.imdb_worker.result.imdb_plot
-            text_area: TextArea = self.query_one('#plot_id', TextArea)
-            text_area.text = imdb_plot
+    # def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+    #     self.post_message(LogMessage(f'ShowMovieDetails:on_worker_state_changed: state={event.state} result={self.imdb_worker.result}'))
+    #
+    #     if event.state == WorkerState.SUCCESS:
+    #         imdb_plot = self.imdb_worker.result.imdb_plot
+    #         text_area: TextArea = self.query_one('#plot_id', TextArea)
+    #         text_area.text = imdb_plot
 
 
 class MyApp(App):
@@ -583,7 +643,7 @@ class MyApp(App):
         def _pick_directory_result(directory_path: Path | None) -> Path | None:
             self.log_message(f'Selected directory: {directory_path}')
             if directory_path:
-                self.push_screen(VideoFileScanner(directory_path, _add_video_file))
+                self.push_screen(VideoFileScannerModal(directory_path, _add_video_file))
 
         self.push_screen(SelectDirectory(), _pick_directory_result)
 
