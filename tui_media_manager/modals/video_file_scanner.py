@@ -12,7 +12,7 @@ from textual.worker import WorkerState
 
 from tui_media_manager.imdb.utils import VideoFile
 from tui_media_manager.messages import LogMessage
-from tui_media_manager.imdb.utils import scrub_video_file_name, get_imdb_basic_info
+from tui_media_manager.imdb.utils import scrub_video_file_name, get_imdb_basic_info, get_imdb_details
 
 
 class VideoFileScannerModal(ModalScreen):
@@ -48,7 +48,8 @@ class VideoFileScannerModal(ModalScreen):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Label(f'Scanning items in directory {self.directory_path}', id='message_id'),
+            Label(f'Scanning items in directory {self.directory_path}...', id='message_id'),
+            Label(f'', id='progress_id'),
             Horizontal(
                 Button('Cancel', compact=True, id='cancel_id')
             )
@@ -58,33 +59,34 @@ class VideoFileScannerModal(ModalScreen):
         def _log_message(message: str) -> None:
             self.post_message(LogMessage(message))
 
+        def _progress_message(message: str) -> None:
+            self.post_message(LogMessage(f'[VideoFileScannerModal] {message}'))
+            label: Label = self.query_one('#progress_id', Label)
+            label.update(message)
+
         def _scanning_complete() -> None:
-            self.post_message(LogMessage(f'Directory scanning complete; dismissing VideoFileScannerModal'))
+            self.post_message(LogMessage(f'[VideoFileScannerModal] Directory scanning complete; dismissing VideoFileScannerModal'))
             self.dismiss()
 
-        def _add_video_file(video_file: VideoFile) -> None:
-            if self.add_video_file_cb:
-                self.add_video_file_cb(video_file)
-
-        self.post_message(LogMessage(f'Starting worker to scan directory {self.directory_path}...'))
-        self.directory_scan_worker = self.run_worker(self.scan_folder(self.directory_path, _log_message, _scanning_complete, _add_video_file))
-        self.post_message(LogMessage(f'Started worker to scan directory {self.directory_path}'))
+        self.post_message(LogMessage(f'[VideoFileScannerModal] Starting worker to scan directory {self.directory_path}...'))
+        self.directory_scan_worker = self.run_worker(self.scan_folder(self.directory_path, _progress_message, _scanning_complete, self.add_video_file_cb))
+        self.post_message(LogMessage(f'[VideoFileScannerModal] Started worker to scan directory {self.directory_path}'))
 
     @on(Button.Pressed, '#cancel_id')
     def on_button_pressed(self, _event: Button.Pressed) -> None:
-        self.post_message(LogMessage(f'VideoFileScannerModal "Cancel" Button pressed'))
+        self.post_message(LogMessage(f'[VideoFileScannerModal] "Cancel" Button pressed'))
 
         if self.directory_scan_worker and self.directory_scan_worker.state == WorkerState.RUNNING:
-            self.post_message(LogMessage(f'VideoFileScannerModal cancelling worker...'))
+            self.post_message(LogMessage(f'[VideoFileScannerModal] cancelling worker...'))
             self.directory_scan_worker.cancel()
-            self.post_message(LogMessage(f'VideoFileScannerModal worker cancelled'))
+            self.post_message(LogMessage(f'[VideoFileScannerModal] worker cancelled'))
 
         # I don't think we need to dismiss, since canceling the worker will trigger a call to _scanning_complete(), and that calls self.dismiss()
         # self.dismiss()
 
     async def scan_folder(self,
                           folder_path: Path,
-                          log_message_cb: Callable[[str], None],
+                          progress_message_cb: Callable[[str], None],
                           scanning_complete_cb: Callable[[], None],
                           add_video_file_cb: Callable[[VideoFile], None],
                           include_extensions: str = None) -> None:
@@ -94,7 +96,7 @@ class VideoFileScannerModal(ModalScreen):
 
             include_extensions_list = [ext.lower().strip() for ext in include_extensions.split(',')]
 
-            log_message_cb(f'Beginning processing of directory: {str(folder_path)}')
+            progress_message_cb(f'Begin processing directory {str(folder_path)}')
 
             for dir_path, dirs, files in os.walk(folder_path):
                 for filename in files:
@@ -106,31 +108,35 @@ class VideoFileScannerModal(ModalScreen):
                         filename_extension = filename_extension[1:]
 
                     if filename_extension.lower() not in include_extensions_list:
-                        log_message_cb(f'Ignoring file: {file_path}')
+                        progress_message_cb(f'Ignoring file: {file_path}')
                         continue
 
-                    scrubbed_video_file_name, year = scrub_video_file_name(filename_no_extension)
-                    video_file = VideoFile(file_path=file_path, scrubbed_file_name=scrubbed_video_file_name, scrubbed_file_year=year)
+                    scrubbed_video_file_name, scrubbed_year = scrub_video_file_name(filename_no_extension)
 
-                    log_message_cb(f'Getting IMDB info for video file: {file_path}')
-                    imdb_info_list = await get_imdb_basic_info(video_file.scrubbed_file_name, video_file.scrubbed_file_year, num_matches=1)
-                    imdb_info = imdb_info_list[0]
-                    if imdb_info:
-                        log_message_cb(f'Found: tt={imdb_info.imdb_tt}, name={imdb_info.imdb_name}, year={imdb_info.imdb_year}')
-                        video_file.imdb_tt = imdb_info.imdb_tt
-                        video_file.imdb_name = imdb_info.imdb_name
-                        video_file.imdb_year = imdb_info.imdb_year
-                        video_file.imdb_rating = imdb_info.imdb_rating
-                        video_file.imdb_plot = imdb_info.imdb_plot
-                        video_file.imdb_plot = 'This is the plot\n\nMore plot details\n\nThe End.'
-                        video_file.imdb_genres = imdb_info.imdb_genres
+                    progress_message_cb(f'Finding basic IMDB info for {filename}...')
+                    imdb_info_list = await get_imdb_basic_info(scrubbed_video_file_name, scrubbed_year, num_matches=1)
+                    imdb_basic_info = imdb_info_list[0]
+                    if imdb_basic_info:
+                        progress_message_cb(f'Found basic IMDB info for {filename} tt={imdb_basic_info.imdb_tt}')
 
-                        log_message_cb(f'Processed video file: {file_path}')
+                        progress_message_cb(f'Finding detailed IMDB info for {filename} tt={imdb_basic_info.imdb_tt}...')
+                        imdb_full_info = await get_imdb_details(imdb_basic_info.imdb_tt)
+                        progress_message_cb(f'Found detailed IMDB info for {filename} tt={imdb_basic_info.imdb_tt}')
+
+                        video_file = VideoFile(file_path=file_path,
+                                               scrubbed_file_name=scrubbed_video_file_name,
+                                               scrubbed_file_year=scrubbed_year,
+                                               imdb_tt=imdb_full_info.imdb_tt,
+                                               imdb_name=imdb_full_info.imdb_name,
+                                               imdb_year=imdb_full_info.imdb_year,
+                                               imdb_rating=imdb_full_info.imdb_rating,
+                                               imdb_plot=imdb_full_info.imdb_plot,
+                                               imdb_genres=imdb_full_info.imdb_genres)
                         add_video_file_cb(video_file)
 
-            log_message_cb(f'End processing of directory: {str(folder_path)}')
+            progress_message_cb(f'End processing directory: {str(folder_path)}')
             scanning_complete_cb()
 
         except asyncio.CancelledError:
-            log_message_cb(f'Caught CancelledError while processing directory: {str(folder_path)}')
+            progress_message_cb(f'Caught CancelledError while processing directory {str(folder_path)}')
             scanning_complete_cb()

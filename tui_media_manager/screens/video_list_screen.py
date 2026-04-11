@@ -12,6 +12,7 @@ from textual.worker import WorkerState
 from tui_media_manager.imdb.utils import VideoFile
 from tui_media_manager.messages import LogMessage
 from tui_media_manager.modals.show_movie_details import ShowMovieDetailsModal
+from tui_media_manager.modals.video_file_scanner import VideoFileScannerModal
 
 
 class VideoListScreen(Screen):
@@ -61,7 +62,7 @@ class VideoListScreen(Screen):
         def _pick_directory_result(directory_path: Path | None) -> Path | None:
             self.post_message(LogMessage(f'[VideoListScreen] Selected directory: {directory_path}'))
             if directory_path:
-                self.app.push_screen(VideoFileScannerModal(directory_path, self.add_video_file))
+                self.app.push_screen(VideoFileScannerModal(directory_path, add_video_file_cb=self.add_video_file))
 
         self.app.push_screen(SelectDirectory(), _pick_directory_result)
 

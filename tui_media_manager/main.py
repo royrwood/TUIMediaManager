@@ -23,7 +23,6 @@ class MyApp(App):
     def on_mount(self) -> None:
         self.push_screen('log_screen')
         self.push_screen('table_screen')
-        # self.run_worker(self.background_worker_task())
         self.action_show_main_menu()
 
     def action_show_main_menu(self):
@@ -58,13 +57,6 @@ class MyApp(App):
     def log_message(self, message: str) -> None:
         log_screen = self.get_screen('log_screen', RuntimeLogScreen)
         log_screen.info(message)
-
-    # async def background_worker_task(self):
-    #     count = 1
-    #     while True:
-    #         self.on_log_message(LogMessage(f'Background Worker Count = {count}'))
-    #         count += 1
-    #         await asyncio.sleep(10.0)
 
 
 if __name__ == '__main__':
