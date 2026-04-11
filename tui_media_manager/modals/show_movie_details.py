@@ -54,6 +54,7 @@ class ShowMovieDetailsModal(ModalScreen[WorkerState]):
      """
 
     BINDINGS = [('escape', 'cancel_menu', 'Cancel Menu')]
+    AUTO_FOCUS = "#ok_id"
 
     def __init__(self, video_file: VideoFile):
         super().__init__()
@@ -70,6 +71,12 @@ class ShowMovieDetailsModal(ModalScreen[WorkerState]):
                 Button('OK', compact=True, id='ok_id')
             )
         )
+
+    def on_mount(self) -> None:
+        text_area = self.query_one('#file_path_id', TextArea)
+        text_area.can_focus = False
+        text_area = self.query_one('#plot_id', TextArea)
+        text_area.can_focus = False
 
     def action_cancel_menu(self) -> None:
         self.dismiss(None)
