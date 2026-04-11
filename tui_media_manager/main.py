@@ -65,18 +65,6 @@ class LogMessage(Message):
         self.level = level
 
 
-# class ShowMovieDetailsMessage(Message):
-#     def __init__(self, video_file: VideoFile):
-#         super().__init__()
-#         self.video_file = video_file
-
-
-class AddVideoFile(Message):
-    def __init__(self, video_file: VideoFile):
-        super().__init__()
-        self.video_file = video_file
-
-
 ####################
 # Utility Functions
 ####################
@@ -240,6 +228,23 @@ async def get_imdb_details(imdb_tt: str) -> IMDBInfo:
                          imdb_plot=movie_details.plot,
                          imdb_genres=movie_details.genres)
     return imdb_info
+
+
+async def search_imdb_title(video_name: str, year: str = '') -> list[IMDBInfo]:
+    imdb_search_results = await asyncio.to_thread(search_title, f'{video_name} {year}')
+
+    imdb_info_list = []
+    for movie in imdb_search_results.titles:
+        imdb_info_list.append(IMDBInfo(imdb_tt=movie.imdb_id, imdb_name=movie.title, imdb_year=movie.year))
+    return imdb_info_list
+
+    # imdb_info = IMDBInfo(imdb_tt=imdb_tt,
+    #                      imdb_name=movie_details.title_localized,
+    #                      imdb_year=str(movie_details.year),
+    #                      imdb_rating=str(movie_details.rating),
+    #                      imdb_plot=movie_details.plot,
+    #                      imdb_genres=movie_details.genres)
+    # return imdb_info
 
 
 #################
@@ -529,6 +534,69 @@ class VideoContentFetchModal(ModalScreen[textual.worker.WorkerState]):
             self.dismiss(event.state)
 
 
+class VideoSearchTitleModal(ModalScreen[textual.worker.WorkerState]):
+    CSS = """
+        VideoSearchTitleModal {
+            align-horizontal: center;
+            
+            & > Vertical {
+                width: auto;
+                height: auto;
+                offset-y: 25vh;
+                border: round $primary;
+                padding: 1 2;
+                
+                & > Label {
+                    margin-bottom: 1;
+                }
+                                
+                & > Horizontal {
+                    width: 100%;
+                    height: auto;
+                    align-horizontal: right;
+                }
+            }
+        }   
+     """
+
+    def __init__(self, video_file: VideoFile):
+        super().__init__()
+        self.video_file = video_file
+        self.imdb_worker = None
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label(f'Searching IMDB for {self.video_file.imdb_name} [{self.video_file.imdb_tt}]', id='message_id'),
+            Horizontal(
+                Button('Cancel', compact=True, id='cancel_id')
+            )
+        )
+
+    def on_mount(self) -> None:
+        self.post_message(LogMessage(f'[VideoSearchTitleModal] Starting worker to fetch IMDB details for {self.video_file.imdb_tt}...'))
+        self.imdb_worker = self.run_worker(search_imdb_title(self.video_file.imdb_tt))
+        self.post_message(LogMessage(f'[VideoSearchTitleModal] Started worker to fetch IMDB details for {self.video_file.imdb_tt}'))
+
+    @on(Button.Pressed, '#cancel_id')
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.post_message(LogMessage(f'[VideoSearchTitleModal] "Cancel" Button pressed'))
+
+        if self.imdb_worker and self.imdb_worker.state == WorkerState.RUNNING:
+            self.post_message(LogMessage(f'[VideoSearchTitleModal] cancelling worker...'))
+            self.imdb_worker.cancel()
+            self.post_message(LogMessage(f'[VideoSearchTitleModal] worker cancelled'))
+
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        self.post_message(LogMessage(f'[VideoSearchTitleModal] Received worker state change event: state={event.state}'))
+
+        if event.state == WorkerState.SUCCESS:
+            self.post_message(LogMessage(f'[VideoSearchTitleModal] Final worker result: result={self.imdb_worker.result}'))
+            self.dismiss(self.imdb_worker.result)
+
+        elif event.state in [WorkerState.CANCELLED, WorkerState.ERROR]:
+            self.dismiss(None)
+
+
 class ShowMovieDetailsModal(ModalScreen[textual.worker.WorkerState]):
     CSS = """
         ShowMovieDetailsModal {
@@ -571,6 +639,8 @@ class ShowMovieDetailsModal(ModalScreen[textual.worker.WorkerState]):
         }
      """
 
+    BINDINGS = [('escape', 'cancel_menu', 'Cancel Menu')]
+
     def __init__(self, video_file: VideoFile):
         super().__init__()
         self.video_file = video_file
@@ -587,6 +657,9 @@ class ShowMovieDetailsModal(ModalScreen[textual.worker.WorkerState]):
             )
         )
 
+    def action_cancel_menu(self) -> None:
+        self.dismiss(None)
+
     @on(Button.Pressed, '#fetch_details_id')
     def fetch_details_button_pressed(self, event: Button.Pressed) -> None:
         def _video_content_fetch_complete_callback(worker_state: textual.worker.WorkerState) -> None:
@@ -599,7 +672,14 @@ class ShowMovieDetailsModal(ModalScreen[textual.worker.WorkerState]):
 
     @on(Button.Pressed, '#search_title_id')
     def search_title_button_pressed(self, event: Button.Pressed) -> None:
-        self.post_message(LogMessage(f'[ShowMovieDetailsModal] Button {event.button.id} pressed'))
+        def _imdb_search_complete_callback(imdb_info_list: list[IMDBInfo] | None) -> None:
+            if imdb_info_list is not None:
+                self.post_message(LogMessage(f'[ShowMovieDetailsModal] results of VideoSearchTitleModal:'))
+                for imdb_info in imdb_info_list:
+                    self.post_message(LogMessage(f'[ShowMovieDetailsModal] {imdb_info.imdb_tt} {imdb_info.imdb_name} {imdb_info.imdb_year}'))
+
+        self.post_message(LogMessage(f'[ShowMovieDetailsModal] Button {event.button.id} pressed; showing VideoSearchTitleModal'))
+        self.app.push_screen(VideoSearchTitleModal(self.video_file), _imdb_search_complete_callback)
 
     @on(Button.Pressed, '#ok_id')
     def cancel_button_pressed(self, event: Button.Pressed) -> None:
@@ -619,7 +699,6 @@ class MyApp(App):
         super().__init__()
         self.log_screen = self.get_screen('log_screen', LogScreen)
         self.table_screen = self.get_screen('table_screen', VideoDataScreen)
-        self.video_files: dict[str, VideoFile] = dict()
 
     def on_mount(self) -> None:
         self.push_screen('log_screen')
