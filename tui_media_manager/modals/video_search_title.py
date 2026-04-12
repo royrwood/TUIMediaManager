@@ -5,12 +5,12 @@ from textual.widgets import Label, Button
 from textual.containers import Vertical, Horizontal
 from textual.worker import Worker, WorkerState
 
-from tui_media_manager.imdb.utils import VideoFile
 from tui_media_manager.imdb.utils import search_imdb_title
+from tui_media_manager.imdb.utils import IMDBInfo
 from tui_media_manager.messages import LogMessage
 
 
-class VideoSearchTitleModal(ModalScreen[WorkerState]):
+class VideoSearchTitleModal(ModalScreen[list[IMDBInfo]]):
     CSS = """
         VideoSearchTitleModal {
             align-horizontal: center;
@@ -35,26 +35,28 @@ class VideoSearchTitleModal(ModalScreen[WorkerState]):
         }   
      """
 
-    def __init__(self, video_file: VideoFile):
+    BINDINGS = [('escape', 'cancel_button_pressed', 'Cancel')]
+
+    def __init__(self, video_title: str):
         super().__init__()
-        self.video_file = video_file
+        self.video_title = video_title
         self.imdb_worker = None
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Label(f'Searching IMDB for {self.video_file.imdb_name} [{self.video_file.imdb_tt}]', id='message_id'),
+            Label(f'Searching IMDB for {self.video_title}', id='message_id'),
             Horizontal(
                 Button('Cancel', compact=True, id='cancel_id')
             )
         )
 
     def on_mount(self) -> None:
-        self.post_message(LogMessage(f'[VideoTitleSearchModal] Starting worker to fetch IMDB details for {self.video_file.imdb_tt}...'))
-        self.imdb_worker = self.run_worker(search_imdb_title(self.video_file.imdb_tt))
-        self.post_message(LogMessage(f'[VideoTitleSearchModal] Started worker to fetch IMDB details for {self.video_file.imdb_tt}'))
+        self.post_message(LogMessage(f'[VideoTitleSearchModal] Starting worker to fetch IMDB details for {self.video_title}...'))
+        self.imdb_worker = self.run_worker(search_imdb_title(self.video_title))
+        self.post_message(LogMessage(f'[VideoTitleSearchModal] Started worker to fetch IMDB details for {self.video_title}'))
 
     @on(Button.Pressed, '#cancel_id')
-    def on_button_pressed(self, _event: Button.Pressed) -> None:
+    def action_cancel_button_pressed(self, _event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'[VideoTitleSearchModal] "Cancel" Button pressed'))
 
         if self.imdb_worker and self.imdb_worker.state == WorkerState.RUNNING:

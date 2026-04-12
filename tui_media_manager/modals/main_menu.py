@@ -31,7 +31,7 @@ class MainMenuModal(ModalScreen):
          }
      """
 
-    BINDINGS = [('escape', 'cancel_menu', 'Cancel Menu')]
+    BINDINGS = [('escape', 'cancel_menu', 'Cancel')]
 
     def compose(self) -> ComposeResult:
         # Use a ListView so arrow keys can navigate up and down in the list

@@ -141,17 +141,9 @@ async def get_imdb_details(imdb_tt: str) -> IMDBInfo:
 
 
 async def search_imdb_title(video_name: str, year: str = '') -> list[IMDBInfo]:
-    imdb_search_results = await asyncio.to_thread(search_title, f'{video_name} {year}')
+    imdb_search_results = await asyncio.to_thread(search_title, f'{video_name} {year}'.strip())
 
     imdb_info_list = []
     for movie in imdb_search_results.titles:
         imdb_info_list.append(IMDBInfo(imdb_tt=movie.imdb_id, imdb_name=movie.title, imdb_year=movie.year))
     return imdb_info_list
-
-    # imdb_info = IMDBInfo(imdb_tt=imdb_tt,
-    #                      imdb_name=movie_details.title_localized,
-    #                      imdb_year=str(movie_details.year),
-    #                      imdb_rating=str(movie_details.rating),
-    #                      imdb_plot=movie_details.plot,
-    #                      imdb_genres=movie_details.genres)
-    # return imdb_info
