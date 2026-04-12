@@ -15,23 +15,17 @@ from tui_media_manager.modals.review_imdb_search_results import ReviewIMDBSearch
 class ShowMovieDetailsModal(ModalScreen[WorkerState]):
     CSS = """
         ShowMovieDetailsModal {
-            align-horizontal: center;
-            align-vertical: middle;
+            align: center middle;
         
             & > Vertical {
                 width: 80vw;
                 height: auto;
-                # padding: 1 2;
                 keyline: thin $primary;
-                # offset-y: 25vh;
-                # background: yellow;
         
                 & > #file_path_id {
                     width: 100%;
                     height: auto;
                     margin: 1;
-                    # padding: 1 2 1 2;
-                    # background: blue;
                 }
         
                 & > #plot_id {
@@ -39,7 +33,6 @@ class ShowMovieDetailsModal(ModalScreen[WorkerState]):
                     height: auto;
                     margin: 1;
                     padding: 1 2 1 2;
-                    # background: red;
                 }
         
                 & > Horizontal {
@@ -48,7 +41,6 @@ class ShowMovieDetailsModal(ModalScreen[WorkerState]):
                     margin: 1;
                     padding: 1 2 1 2;
                     align-horizontal: right;
-                    # background: green;
                 
                     & > Button {
                         margin: 0 1;
