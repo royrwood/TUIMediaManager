@@ -43,7 +43,7 @@ class GetSearchTitleModal(ModalScreen[str]):
         }   
      """
 
-    BINDINGS = [('escape', 'cancel_button_pressed', 'Cancel')]
+    BINDINGS = [('escape', 'do_cancel', 'Cancel')]
 
     def __init__(self, video_file: VideoFile):
         super().__init__()
@@ -73,12 +73,19 @@ class GetSearchTitleModal(ModalScreen[str]):
         )
 
     @on(Button.Pressed, '#cancel_id')
-    def action_cancel_button_pressed(self, _event: Button.Pressed) -> None:
+    def action_do_cancel(self, _event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'[GetSearchTitleModal] "Cancel" Button pressed'))
         self.dismiss(None)
 
     @on(Button.Pressed, '#search_id')
     def search_button_pressed(self, _event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'[GetSearchTitleModal] "Search IMDB" Button pressed'))
+        input_widget = self.query_one('Input', Input)
+        self.dismiss(input_widget.value)
+
+    @on(Input.Submitted)
+    def handle_submit(self, _event: Input.Submitted) -> None:
+        # text = event.value
+        self.post_message(LogMessage(f'[GetSearchTitleModal] Enter pressed in Input widget'))
         input_widget = self.query_one('Input', Input)
         self.dismiss(input_widget.value)

@@ -9,6 +9,7 @@ from tui_media_manager.imdb.utils import VideoFile, IMDBInfo
 from tui_media_manager.messages import LogMessage
 from tui_media_manager.modals.get_search_title import GetSearchTitleModal
 from tui_media_manager.modals.search_imdb_by_title import SearchIMDBByTitleModal
+from tui_media_manager.modals.review_imdb_search_results import ReviewIMDBSearchResultsModal
 
 
 class ShowMovieDetailsModal(ModalScreen[WorkerState]):
@@ -57,7 +58,7 @@ class ShowMovieDetailsModal(ModalScreen[WorkerState]):
         }
      """
 
-    BINDINGS = [('escape', 'cancel_menu', 'Cancel')]
+    BINDINGS = [('escape', 'do_cancel', 'Cancel')]
     AUTO_FOCUS = "#ok_id"
 
     def __init__(self, video_file: VideoFile):
@@ -79,18 +80,8 @@ class ShowMovieDetailsModal(ModalScreen[WorkerState]):
             )
         )
 
-    def action_cancel_menu(self) -> None:
+    def action_do_cancel(self) -> None:
         self.dismiss(None)
-
-    def search_imdb_for_title(self, search_title: str):
-        def _video_search_title_callback(imdb_info_list: list[IMDBInfo]) -> None:
-            if search_title is not None:
-                self.post_message(LogMessage(f'[ShowMovieDetailsModal] SearchIMDBByTitleModal returned {len(imdb_info_list)} items:'))
-                for i, imdb_info in enumerate(imdb_info_list):
-                    self.post_message(LogMessage(f'[ShowMovieDetailsModal] {i:02}: {imdb_info.imdb_tt} {imdb_info.imdb_name} {imdb_info.imdb_year} '))
-
-        self.post_message(LogMessage(f'[ShowMovieDetailsModal] Showing SearchIMDBByTitleModal'))
-        self.app.push_screen(SearchIMDBByTitleModal(search_title), _video_search_title_callback)
 
     def get_search_query_params(self):
         def _video_search_query_params_callback(search_title: str) -> None:
@@ -100,6 +91,25 @@ class ShowMovieDetailsModal(ModalScreen[WorkerState]):
 
         self.post_message(LogMessage(f'[ShowMovieDetailsModal] Showing GetSearchTitleModal'))
         self.app.push_screen(GetSearchTitleModal(self.video_file), _video_search_query_params_callback)
+
+    def search_imdb_for_title(self, search_title: str):
+        def _video_search_title_callback(imdb_info_list: list[IMDBInfo]) -> None:
+            if search_title is not None:
+                self.post_message(LogMessage(f'[ShowMovieDetailsModal] SearchIMDBByTitleModal returned {len(imdb_info_list)} items:'))
+                for i, imdb_info in enumerate(imdb_info_list):
+                    self.post_message(LogMessage(f'[ShowMovieDetailsModal] {i:02}: {imdb_info.imdb_tt} {imdb_info.imdb_name} {imdb_info.imdb_year} '))
+                self.review_imdb_search_results(imdb_info_list)
+
+        self.post_message(LogMessage(f'[ShowMovieDetailsModal] Showing SearchIMDBByTitleModal'))
+        self.app.push_screen(SearchIMDBByTitleModal(search_title), _video_search_title_callback)
+
+    def review_imdb_search_results(self, imdb_info_list: list[IMDBInfo]):
+        def _review_search_results_callback(imdb_info: IMDBInfo) -> None:
+            if imdb_info is not None:
+                self.post_message(LogMessage(f'[ShowMovieDetailsModal] ReviewIMDBSearchResultsModal returned {imdb_info}'))
+
+        self.post_message(LogMessage(f'[ShowMovieDetailsModal] Showing ReviewIMDBSearchResultsModal'))
+        self.app.push_screen(ReviewIMDBSearchResultsModal(imdb_info_list), _review_search_results_callback)
 
     @on(Button.Pressed, '#search_imdb_id')
     def search_imdb_button_pressed(self, event: Button.Pressed) -> None:

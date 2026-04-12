@@ -31,7 +31,7 @@ class MainMenuModal(ModalScreen):
          }
      """
 
-    BINDINGS = [('escape', 'cancel_menu', 'Cancel')]
+    BINDINGS = [('escape', 'do_cancel', 'Cancel')]
 
     def compose(self) -> ComposeResult:
         # Use a ListView so arrow keys can navigate up and down in the list
@@ -44,5 +44,5 @@ class MainMenuModal(ModalScreen):
         main_menu_actions_enum = getattr(MainMenuModal.MainMenuActions, event.item.id)  # Pycharm linter likes this way of getting the enum by name-- FINE, WHATEVER.
         self.dismiss(main_menu_actions_enum)
 
-    def action_cancel_menu(self) -> None:
+    def action_do_cancel(self) -> None:
         self.dismiss(None)

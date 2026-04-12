@@ -35,7 +35,7 @@ class SearchIMDBByTitleModal(ModalScreen[list[IMDBInfo]]):
         }   
      """
 
-    BINDINGS = [('escape', 'cancel_button_pressed', 'Cancel')]
+    BINDINGS = [('escape', 'do_cancel', 'Cancel')]
 
     def __init__(self, video_title: str):
         super().__init__()
@@ -56,7 +56,7 @@ class SearchIMDBByTitleModal(ModalScreen[list[IMDBInfo]]):
         self.post_message(LogMessage(f'[VideoTitleSearchModal] Started worker to fetch IMDB details for {self.video_title}'))
 
     @on(Button.Pressed, '#cancel_id')
-    def action_cancel_button_pressed(self, _event: Button.Pressed) -> None:
+    def action_do_cancel(self, _event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'[VideoTitleSearchModal] "Cancel" Button pressed'))
 
         if self.imdb_worker and self.imdb_worker.state == WorkerState.RUNNING:
