@@ -10,9 +10,9 @@ from tui_media_manager.imdb.utils import IMDBInfo
 from tui_media_manager.messages import LogMessage
 
 
-class VideoSearchTitleModal(ModalScreen[list[IMDBInfo]]):
+class SearchIMDBByTitleModal(ModalScreen[list[IMDBInfo]]):
     CSS = """
-        VideoSearchTitleModal {
+        SearchIMDBByTitleModal {
             align-horizontal: center;
             
             & > Vertical {
@@ -68,7 +68,7 @@ class VideoSearchTitleModal(ModalScreen[list[IMDBInfo]]):
         self.post_message(LogMessage(f'[VideoTitleSearchModal] Received worker state change event: state={event.state}'))
 
         if event.state == WorkerState.SUCCESS:
-            self.post_message(LogMessage(f'[VideoTitleSearchModal] Final worker result: result={self.imdb_worker.result}'))
+            self.post_message(LogMessage(f'[VideoTitleSearchModal] Final worker result: {len(self.imdb_worker.result)} IMDB search matches'))
             self.dismiss(self.imdb_worker.result)
 
         elif event.state in [WorkerState.CANCELLED, WorkerState.ERROR]:

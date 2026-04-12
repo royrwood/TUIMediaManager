@@ -10,9 +10,9 @@ from tui_media_manager.imdb.utils import VideoFile
 from tui_media_manager.messages import LogMessage
 
 
-class VideoSearchQueryParamsModal(ModalScreen[str]):
+class GetSearchTitleModal(ModalScreen[str]):
     CSS = """
-        VideoSearchQueryParamsModal {
+        GetSearchTitleModal {
             align-horizontal: center;
             
             & > Vertical {
@@ -74,11 +74,11 @@ class VideoSearchQueryParamsModal(ModalScreen[str]):
 
     @on(Button.Pressed, '#cancel_id')
     def action_cancel_button_pressed(self, _event: Button.Pressed) -> None:
-        self.post_message(LogMessage(f'[VideoSearchQueryParamsModal] "Cancel" Button pressed'))
+        self.post_message(LogMessage(f'[GetSearchTitleModal] "Cancel" Button pressed'))
         self.dismiss(None)
 
     @on(Button.Pressed, '#search_id')
     def search_button_pressed(self, _event: Button.Pressed) -> None:
-        self.post_message(LogMessage(f'[VideoSearchQueryParamsModal] "Search IMDB" Button pressed'))
+        self.post_message(LogMessage(f'[GetSearchTitleModal] "Search IMDB" Button pressed'))
         input_widget = self.query_one('Input', Input)
         self.dismiss(input_widget.value)
