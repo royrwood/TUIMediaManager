@@ -8,7 +8,7 @@ from tui_media_manager.imdb.utils import IMDBInfo
 from tui_media_manager.messages import LogMessage
 
 
-class ShowIMDBInfoModal(ModalScreen):
+class ShowIMDBInfoModal(ModalScreen[IMDBInfo]):
     CSS = """
         ShowIMDBInfoModal {
             align: center middle;
@@ -48,9 +48,10 @@ class ShowIMDBInfoModal(ModalScreen):
         super().__init__()
         self.imdb_info = imdb_info
 
-        imdb_info_text = f'IMDB: {self.imdb_info.imdb_tt}\n' + \
-            f'Title: {self.imdb_info.imdb_name}\n' + \
-            f'Year: {self.imdb_info.imdb_year}\n' + \
+        imdb_info_text = \
+            f'IMDB  : {self.imdb_info.imdb_tt}\n' + \
+            f'Title : {self.imdb_info.imdb_name}\n' + \
+            f'Year  : {self.imdb_info.imdb_year}\n' + \
             f'Rating: {self.imdb_info.imdb_rating}\n' + \
             f'Genres: {self.imdb_info.imdb_genres}\n' + \
             f'\n' + \
@@ -74,7 +75,7 @@ class ShowIMDBInfoModal(ModalScreen):
     @on(Button.Pressed, '#accept_id')
     def accept_button_pressed(self, event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'[ShowIMDBInfoModal] Button {event.button.id} pressed'))
-        self.dismiss(None)
+        self.dismiss(self.imdb_info)
 
     @on(Button.Pressed, '#cancel_id')
     def cancel_button_pressed(self, event: Button.Pressed) -> None:

@@ -1,3 +1,4 @@
+from textual import on
 from textual.screen import ModalScreen
 from textual.app import ComposeResult
 from textual.widgets import Label, DataTable, Button
@@ -9,7 +10,7 @@ from tui_media_manager.modals.get_imdb_details import GetIMDBDetailsModal
 from tui_media_manager.modals.view_imdb_info import ShowIMDBInfoModal
 
 
-class ReviewIMDBSearchResultsModal(ModalScreen):
+class ReviewIMDBSearchResultsModal(ModalScreen[IMDBInfo]):
     CSS = """
          ReviewIMDBSearchResultsModal {
              align: center middle;
@@ -49,6 +50,7 @@ class ReviewIMDBSearchResultsModal(ModalScreen):
      """
 
     BINDINGS = [('escape', 'do_cancel', 'Cancel')]
+    AUTO_FOCUS = "#accept_id"
 
     def __init__(self, imdb_info_list: list[IMDBInfo]):
         super().__init__()
@@ -64,35 +66,43 @@ class ReviewIMDBSearchResultsModal(ModalScreen):
             Label('IMDB Search Results:'),
             self.data_table,
             Horizontal(
-                Button('OK', compact=True, id='okay_id'),
+                Button('Accept', compact=True, id='accept_id'),
                 Button('Cancel', compact=True, id='cancel_id')
             )
         )
 
     def review_imdb_details(self, imdb_info: IMDBInfo):
-        def _imdb_info_review_callback(foo):
-            self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Got ShowIMDBInfoModal response: {foo}'))
+        def _imdb_info_review_callback(accepted_imdb_info: IMDBInfo):
+            self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Got ShowIMDBInfoModal response: imdb_info={accepted_imdb_info}'))
+            if accepted_imdb_info:
+                self.dismiss(accepted_imdb_info)
 
         self.app.push_screen(ShowIMDBInfoModal(imdb_info), _imdb_info_review_callback)
 
-    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+    def get_imdb_info_and_review_or_dismiss(self, cursor_row: int, review_results: bool) -> None:
         def _get_imdb_details_callback(imdb_info: IMDBInfo):
-            self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Got imdb_info: {imdb_info}'))
+            self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Got IMDB details: imdb_info={imdb_info}'))
 
-            if imdb_info:
+            if imdb_info and review_results:
                 self.review_imdb_details(imdb_info)
+            else:
+                self.dismiss(imdb_info)
 
-        self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] DataTable row selected: cursor_row={event.cursor_row}, key={event.row_key.value}'))
-        row_data = self.data_table.get_row_at(event.cursor_row)
-        self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] DataTable row data by index: {row_data}'))
-        # row_data = self.data_table.get_row(event.row_key)
-        # self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] DataTable row data by key: {row_data}'))
-
+        row_data = self.data_table.get_row_at(cursor_row)
         imdb_tt = row_data[0]
         imdb_name = row_data[2]
-        self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Getting IMDB details for imdb_tt={imdb_tt}'))
 
+        self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Getting IMDB details for imdb_tt={imdb_tt} imdb_name={imdb_name}'))
         self.app.push_screen(GetIMDBDetailsModal(imdb_tt, imdb_name), _get_imdb_details_callback)
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] DataTable row selected: cursor_row={event.cursor_row}, key={event.row_key.value}'))
+        self.get_imdb_info_and_review_or_dismiss(event.cursor_row, review_results=True)
+
+    @on(Button.Pressed, '#accept_id')
+    def accept_button_pressed(self, event: Button.Pressed) -> None:
+        self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Button {event.button.id} pressed'))
+        self.get_imdb_info_and_review_or_dismiss(self.data_table.cursor_coordinate.row, review_results=False)
 
     def action_do_cancel(self) -> None:
         self.dismiss(None)
