@@ -18,7 +18,8 @@ class ShowMovieDetailsModal(ModalScreen[WorkerState]):
             align: center middle;
         
             & > Vertical {
-                width: 80vw;
+                min-width: 60vw;
+                width: auto;
                 height: auto;
                 keyline: thin $primary;
         
