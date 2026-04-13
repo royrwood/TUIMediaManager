@@ -94,7 +94,4 @@ class VideoListScreen(Screen):
         video_file = self.video_files[file_path]
         # self.post_message(ShowMovieDetailsMessage(video_file))
 
-        self.app.push_screen(ShowMovieDetailsModal(video_file), self.handle_movie_details_result)
-
-    def handle_movie_details_result(self, worker_state: WorkerState) -> None:
-        self.post_message(LogMessage(f'[VideoListScreen] Received ShowMovieDetails result: {worker_state}'))
+        self.app.push_screen(ShowMovieDetailsModal(video_file))

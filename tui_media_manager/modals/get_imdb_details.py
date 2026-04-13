@@ -5,7 +5,6 @@ from textual.widgets import Label, Button
 from textual.containers import Vertical, Horizontal
 from textual.worker import Worker, WorkerState
 
-from tui_media_manager.imdb.utils import VideoFile
 from tui_media_manager.messages import LogMessage
 from tui_media_manager.imdb.utils import get_imdb_details
 
@@ -68,6 +67,7 @@ class GetIMDBDetailsModal(ModalScreen[WorkerState]):
 
         if event.state == WorkerState.SUCCESS:
             self.post_message(LogMessage(f'[GetIMDBDetailsModal] Final worker result: result={self.imdb_worker.result}'))
+            self.dismiss(self.imdb_worker.result)
 
-        if event.state in [WorkerState.CANCELLED, WorkerState.ERROR, WorkerState.SUCCESS]:
-            self.dismiss(event.state)
+        elif event.state in [WorkerState.CANCELLED, WorkerState.ERROR]:
+            self.dismiss(None)

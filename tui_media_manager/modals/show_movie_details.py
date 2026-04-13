@@ -12,7 +12,7 @@ from tui_media_manager.modals.search_imdb_by_title import SearchIMDBByTitleModal
 from tui_media_manager.modals.review_imdb_search_results import ReviewIMDBSearchResultsModal
 
 
-class ShowMovieDetailsModal(ModalScreen[WorkerState]):
+class ShowMovieDetailsModal(ModalScreen):
     CSS = """
         ShowMovieDetailsModal {
             align: center middle;
@@ -112,4 +112,4 @@ class ShowMovieDetailsModal(ModalScreen[WorkerState]):
     @on(Button.Pressed, '#ok_id')
     def ok_button_pressed(self, event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'[ShowMovieDetailsModal] Button {event.button.id} pressed'))
-        self.dismiss(WorkerState.SUCCESS)
+        self.dismiss(None)

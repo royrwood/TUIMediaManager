@@ -6,6 +6,7 @@ from textual.containers import Vertical, Horizontal
 from tui_media_manager.messages import LogMessage
 from tui_media_manager.imdb.utils import IMDBInfo
 from tui_media_manager.modals.get_imdb_details import GetIMDBDetailsModal
+from tui_media_manager.modals.view_imdb_info import ShowIMDBInfoModal
 
 
 class ReviewIMDBSearchResultsModal(ModalScreen):
@@ -68,9 +69,18 @@ class ReviewIMDBSearchResultsModal(ModalScreen):
             )
         )
 
+    def review_imdb_details(self, imdb_info: IMDBInfo):
+        def _imdb_info_review_callback(foo):
+            self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Got ShowIMDBInfoModal response: {foo}'))
+
+        self.app.push_screen(ShowIMDBInfoModal(imdb_info), _imdb_info_review_callback)
+
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         def _get_imdb_details_callback(imdb_info: IMDBInfo):
             self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Got imdb_info: {imdb_info}'))
+
+            if imdb_info:
+                self.review_imdb_details(imdb_info)
 
         self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] DataTable row selected: cursor_row={event.cursor_row}, key={event.row_key.value}'))
         row_data = self.data_table.get_row_at(event.cursor_row)
