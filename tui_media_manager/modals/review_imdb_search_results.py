@@ -61,13 +61,16 @@ class ReviewIMDBSearchResultsModal(ModalScreen[IMDBInfo]):
         for i, imdb_info in enumerate(self.imdb_info_list):
             self.data_table.add_row(f'[dim]{imdb_info.imdb_tt}[/dim]', f'[dim]{imdb_info.imdb_year}[/dim]', f'[dim]{imdb_info.imdb_name}[/dim]', key=f'imdb_info_{i}')
 
+        self.accept_button = Button('Accept', compact=True, id='accept_id')
+        self.cancel_button = Button('Cancel', compact=True, id='cancel_id')
+
     def compose(self) -> ComposeResult:
         yield Vertical(
             Label('IMDB Search Results:'),
             self.data_table,
             Horizontal(
-                Button('Accept', compact=True, id='accept_id'),
-                Button('Cancel', compact=True, id='cancel_id')
+                self.accept_button,
+                self.cancel_button
             )
         )
 
@@ -86,6 +89,12 @@ class ReviewIMDBSearchResultsModal(ModalScreen[IMDBInfo]):
 
             if imdb_info:
                 self.imdb_response_info_by_row_key[event.row_key.value] = imdb_info
+
+                coordinate = self.data_table.cursor_coordinate
+                row_key = f'imdb_info_{coordinate.row}'
+                if row_key in self.imdb_response_info_by_row_key:
+                    self.accept_button.disabled = False
+
                 self.data_table.update_cell(event.row_key, self.column_keys[0], f'[bold]{imdb_info.imdb_tt}[/bold]')
                 self.data_table.update_cell(event.row_key, self.column_keys[1], f'[bold]{imdb_info.imdb_year}[/bold]')
                 self.data_table.update_cell(event.row_key, self.column_keys[2], f'[bold]{imdb_info.imdb_name}[/bold]')
@@ -95,6 +104,15 @@ class ReviewIMDBSearchResultsModal(ModalScreen[IMDBInfo]):
         selected_imdb_info = self.imdb_info_list[event.cursor_row]
         self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Getting and reviewing IMDB details for imdb_tt={selected_imdb_info.imdb_tt} imdb_name={selected_imdb_info.imdb_name}'))
         self.app.push_screen(GetIMDBDetailsModal(selected_imdb_info.imdb_tt, selected_imdb_info.imdb_name), _get_imdb_details_callback)
+
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted):
+        self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] DataTable row highlighted: cursor_row={event.cursor_row}, key={event.row_key.value}'))
+        if event.row_key.value in self.imdb_response_info_by_row_key:
+            self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] IMDB info AVAILABLE for highlighted row; enable "Accept" button'))
+            self.accept_button.disabled = False
+        else:
+            self.accept_button.disabled = True
+            self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] IMDB info NOT AVAILABLE for highlighted row; disable "Accept" button'))
 
     @on(Button.Pressed, '#accept_id')
     def accept_button_pressed(self, event: Button.Pressed) -> None:

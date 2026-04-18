@@ -49,13 +49,13 @@ class ShowIMDBInfoModal(ModalScreen[IMDBInfo]):
         self.imdb_info = imdb_info
 
         imdb_info_text = \
-            f'IMDB  : {self.imdb_info.imdb_tt}\n' + \
-            f'Title : {self.imdb_info.imdb_name}\n' + \
-            f'Year  : {self.imdb_info.imdb_year}\n' + \
-            f'Rating: {self.imdb_info.imdb_rating}\n' + \
-            f'Genres: {self.imdb_info.imdb_genres}\n' + \
+            f'IMDB  : {self.imdb_info.imdb_tt or ""}\n' + \
+            f'Title : {self.imdb_info.imdb_name or ""}\n' + \
+            f'Year  : {self.imdb_info.imdb_year or ""}\n' + \
+            f'Rating: {self.imdb_info.imdb_rating or ""}\n' + \
+            f'Genres: {self.imdb_info.imdb_genres or ""}\n' + \
             f'\n' + \
-            self.imdb_info.imdb_plot
+            (self.imdb_info.imdb_plot  or "")
 
         self.plot_text_area = TextArea(imdb_info_text, read_only=True, show_cursor=False, id='plot_id')
         self.plot_text_area.can_focus = False
