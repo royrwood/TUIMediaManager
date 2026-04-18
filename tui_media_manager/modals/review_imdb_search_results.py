@@ -54,11 +54,12 @@ class ReviewIMDBSearchResultsModal(ModalScreen[IMDBInfo]):
     def __init__(self, imdb_info_list: list[IMDBInfo]):
         super().__init__()
         self.imdb_info_list = imdb_info_list
+        self.imdb_response_info_by_row_key = dict()
 
         self.data_table = DataTable(show_header=True, cell_padding=2, header_height=1, cursor_type='row', id='imdb_result_table')
-        self.data_table.add_columns('IMDB', 'Year', 'Name')
+        self.column_keys = self.data_table.add_columns('IMDB', 'Year', 'Name')
         for i, imdb_info in enumerate(self.imdb_info_list):
-            self.data_table.add_row(imdb_info.imdb_tt, imdb_info.imdb_year, imdb_info.imdb_name, key=f'imdb_info_{i}')
+            self.data_table.add_row(f'[dim]{imdb_info.imdb_tt}[/dim]', f'[dim]{imdb_info.imdb_year}[/dim]', f'[dim]{imdb_info.imdb_name}[/dim]', key=f'imdb_info_{i}')
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -76,32 +77,33 @@ class ReviewIMDBSearchResultsModal(ModalScreen[IMDBInfo]):
             if accepted_imdb_info:
                 self.dismiss(accepted_imdb_info)
 
+        self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Reviewing IMDB results for {imdb_info.imdb_tt} {imdb_info.imdb_name}'))
         self.app.push_screen(ShowIMDBInfoModal(imdb_info), _imdb_info_review_callback)
 
-    def get_imdb_info_and_review_or_dismiss(self, cursor_row: int, review_results: bool) -> None:
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         def _get_imdb_details_callback(imdb_info: IMDBInfo):
             self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Got IMDB details: imdb_info={imdb_info}'))
 
-            if imdb_info and review_results:
+            if imdb_info:
+                self.imdb_response_info_by_row_key[event.row_key.value] = imdb_info
+                self.data_table.update_cell(event.row_key, self.column_keys[0], f'[bold]{imdb_info.imdb_tt}[/bold]')
+                self.data_table.update_cell(event.row_key, self.column_keys[1], f'[bold]{imdb_info.imdb_year}[/bold]')
+                self.data_table.update_cell(event.row_key, self.column_keys[2], f'[bold]{imdb_info.imdb_name}[/bold]')
                 self.review_imdb_details(imdb_info)
-            else:
-                self.dismiss(imdb_info)
 
-        row_data = self.data_table.get_row_at(cursor_row)
-        imdb_tt = row_data[0]
-        imdb_name = row_data[2]
-
-        self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Getting IMDB details for imdb_tt={imdb_tt} imdb_name={imdb_name}'))
-        self.app.push_screen(GetIMDBDetailsModal(imdb_tt, imdb_name), _get_imdb_details_callback)
-
-    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] DataTable row selected: cursor_row={event.cursor_row}, key={event.row_key.value}'))
-        self.get_imdb_info_and_review_or_dismiss(event.cursor_row, review_results=True)
+        selected_imdb_info = self.imdb_info_list[event.cursor_row]
+        self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Getting and reviewing IMDB details for imdb_tt={selected_imdb_info.imdb_tt} imdb_name={selected_imdb_info.imdb_name}'))
+        self.app.push_screen(GetIMDBDetailsModal(selected_imdb_info.imdb_tt, selected_imdb_info.imdb_name), _get_imdb_details_callback)
 
     @on(Button.Pressed, '#accept_id')
     def accept_button_pressed(self, event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Button {event.button.id} pressed'))
-        self.get_imdb_info_and_review_or_dismiss(self.data_table.cursor_coordinate.row, review_results=False)
+        # self.dismiss(imdb_info)
+
+    @on(Button.Pressed, '#cancel_id')
+    def accept_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(None)
 
     def action_do_cancel(self) -> None:
         self.dismiss(None)

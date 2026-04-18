@@ -65,7 +65,7 @@ class ShowIMDBInfoModal(ModalScreen[IMDBInfo]):
             self.plot_text_area,
             Horizontal(
                 Button('Accept', compact=True, id='accept_id'),
-                Button('Cancel', compact=True, id='cancel_id')
+                Button('Close', compact=True, id='close_id')
             )
         )
 
@@ -77,7 +77,7 @@ class ShowIMDBInfoModal(ModalScreen[IMDBInfo]):
         self.post_message(LogMessage(f'[ShowIMDBInfoModal] Button {event.button.id} pressed'))
         self.dismiss(self.imdb_info)
 
-    @on(Button.Pressed, '#cancel_id')
+    @on(Button.Pressed, '#close_id')
     def cancel_button_pressed(self, event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'[ShowIMDBInfoModal] Button {event.button.id} pressed'))
         self.dismiss(None)
