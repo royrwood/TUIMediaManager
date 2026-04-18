@@ -1,18 +1,14 @@
 from enum import StrEnum
+from typing import Type
 
 from textual.screen import ModalScreen
 from textual.app import ComposeResult
 from textual.widgets import Label, ListItem, ListView
 
 
-class ChooseSortByOptionModal(ModalScreen):
-    class SortByOptions(StrEnum):
-        SORT_BY_NAME = 'Sort by Name'
-        SORT_BY_FILEPATH = 'Sort by Filepath'
-        SORT_BY_IMDB_TT = 'Sort by IMDB Number'
-
+class PopupMenuModal(ModalScreen[StrEnum]):
     CSS = """
-         ChooseSortByOptionModal {
+         PopupMenuModal {
              align-horizontal: center;
 
              & > ListView {
@@ -32,16 +28,20 @@ class ChooseSortByOptionModal(ModalScreen):
 
     BINDINGS = [('escape', 'do_cancel', 'Cancel')]
 
+    def __init__(self, menu_choice_enums: Type[StrEnum]) -> None:
+        super().__init__()
+        self.menu_choice_enums = menu_choice_enums
+
     def compose(self) -> ComposeResult:
         # Use a ListView so arrow keys can navigate up and down in the list
         with ListView():
-            for menu_action in ChooseSortByOptionModal.SortByOptions:
-                yield ListItem(Label(str(menu_action.value)), id=menu_action.name)
+            for choice_enum in self.menu_choice_enums:
+                yield ListItem(Label(str(choice_enum.value)), id=choice_enum.name)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        # sort_by_option = ChooseSortByOptionModal.SortByOptions[event.item.id]  # Pycharm linter complains about this because SortByOptions is a StrEnum, not a plain Enum
-        sort_by_option = getattr(ChooseSortByOptionModal.SortByOptions, event.item.id)  # Pycharm linter likes this way of getting the enum by name-- FINE, WHATEVER.
-        self.dismiss(sort_by_option)
+        # choice_enum = self.menu_option_enums[event.item.id]  # Pycharm linter complains about this because SortByOptions is a StrEnum, not a plain Enum
+        choice_enum = getattr(self.menu_choice_enums, event.item.id)  # Pycharm linter likes this way of getting the enum by name-- FINE, WHATEVER.
+        self.dismiss(choice_enum)
 
     def action_do_cancel(self) -> None:
         self.dismiss(None)

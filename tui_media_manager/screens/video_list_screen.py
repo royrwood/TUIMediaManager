@@ -1,3 +1,4 @@
+from enum import StrEnum
 from pathlib import Path
 import dataclasses
 import json
@@ -12,15 +13,21 @@ from tui_media_manager.imdb.utils import VideoFile
 from tui_media_manager.messages import LogMessage
 from tui_media_manager.modals.show_movie_details import ShowMovieDetailsModal
 from tui_media_manager.modals.video_file_scanner import VideoFileScannerModal
-from tui_media_manager.modals.get_sort_by_option import ChooseSortByOptionModal
+from tui_media_manager.modals.popup_menu import PopupMenuModal
 
 
 class VideoListScreen(Screen):
+    class SortByOptions(StrEnum):
+        SORT_BY_NAME = 'Sort by IMDB Name'
+        SORT_BY_FILEPATH = 'Sort by File Name'
+        SORT_BY_IMDB_TT = 'Sort by IMDB Number'
+
     BINDINGS = [('s', 'sort_video_list', 'Sort List'), ]
 
     def __init__(self) -> None:
         super().__init__()
         self.video_files: dict[str, VideoFile] = dict()
+        self.sort_by = self.SortByOptions.SORT_BY_FILEPATH
 
     def compose(self) -> ComposeResult:
         yield DataTable(show_header=True, cell_padding=2, header_height=1, cursor_type='row', id='video_files')
@@ -40,7 +47,7 @@ class VideoListScreen(Screen):
                 for video_file_dict in video_files_json:
                     video_file_path = video_file_dict['file_path']
                     self.video_files[video_file_path] = VideoFile(**video_file_dict)
-                self.set_video_data(self.video_files)
+                self.refresh_table()
 
         self.app.push_screen(FileOpen(), _file_open_result)
 
@@ -67,11 +74,18 @@ class VideoListScreen(Screen):
 
         self.app.push_screen(SelectDirectory(), _pick_directory_result)
 
-    def set_video_data(self, video_files: dict[str, VideoFile]) -> None:
-        self.video_files = video_files
+    def refresh_table(self) -> None:
         data_table = self.query_one(DataTable)
         data_table.clear()
-        for video_file in video_files.values():
+
+        if self.sort_by == VideoListScreen.SortByOptions.SORT_BY_FILEPATH:
+            sorted_video_files = sorted(self.video_files.values(), key=lambda _video_file: _video_file.file_path.lower())
+        elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_TT:
+            sorted_video_files = sorted(self.video_files.values(), key=lambda _video_file: _video_file.imdb_tt.lower())
+        else:
+            sorted_video_files = sorted(self.video_files.values(), key=lambda _video_file: _video_file.imdb_name.lower())
+
+        for video_file in sorted_video_files:
             video_filename = Path(video_file.file_path).name
             data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_filename, key=video_file.file_path)
 
@@ -93,14 +107,14 @@ class VideoListScreen(Screen):
 
         file_path = event.row_key.value
         video_file = self.video_files[file_path]
-        # self.post_message(ShowMovieDetailsMessage(video_file))
 
         self.app.push_screen(ShowMovieDetailsModal(video_file))
 
     def action_sort_video_list(self):
-        def _get_sort_option_result(sort_by_option: ChooseSortByOptionModal.SortByOptions | None) -> Path | None:
+        def _get_sort_option_result(sort_by_option: VideoListScreen.SortByOptions | None) -> Path | None:
             self.post_message(LogMessage(f'[VideoListScreen] Chose sort option: {sort_by_option.name} {sort_by_option.value}'))
             if sort_by_option:
-                pass
+                self.sort_by = sort_by_option
+                self.refresh_table()
 
-        self.app.push_screen(ChooseSortByOptionModal(), _get_sort_option_result)
+        self.app.push_screen(PopupMenuModal(VideoListScreen.SortByOptions), _get_sort_option_result)
