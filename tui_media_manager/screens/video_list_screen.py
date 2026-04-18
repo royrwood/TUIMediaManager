@@ -19,7 +19,7 @@ from tui_media_manager.modals.popup_menu import PopupMenuModal
 class VideoListScreen(Screen):
     class SortByOptions(StrEnum):
         SORT_BY_NAME = 'Sort by IMDB Name'
-        SORT_BY_FILEPATH = 'Sort by File Name'
+        SORT_BY_FILEPATH = 'Sort by File Path'
         SORT_BY_IMDB_TT = 'Sort by IMDB Number'
 
     BINDINGS = [('s', 'sort_video_list', 'Sort List'), ]
@@ -28,14 +28,21 @@ class VideoListScreen(Screen):
         super().__init__()
         self.video_files: dict[str, VideoFile] = dict()
         self.sort_by = self.SortByOptions.SORT_BY_FILEPATH
+        self.data_table: DataTable = DataTable(show_header=True, cell_padding=2, header_height=1, cursor_type='row', id='video_files')
+        self.imdb_tt_column_key = None
+        self.imdb_name_column_key = None
+        self.imdb_year_column_key = None
+        self.filepath_column_key = None
 
     def compose(self) -> ComposeResult:
-        yield DataTable(show_header=True, cell_padding=2, header_height=1, cursor_type='row', id='video_files')
+        yield self.data_table
         yield Footer()
 
     def on_mount(self) -> None:
-        table = self.query_one(DataTable)
-        table.add_columns('IMDB', 'Name', 'Year', 'File')
+        self.imdb_tt_column_key = self.data_table.add_column(' IMDB Number ')
+        self.imdb_name_column_key = self.data_table.add_column(' IMDB Name ')
+        self.imdb_year_column_key = self.data_table.add_column(' Year ')
+        self.filepath_column_key = self.data_table.add_column('[reverse] File Path [/reverse]')
 
     def load_video_files(self):
         def _file_open_result(file_path: Path | None) -> Path | None:
@@ -75,34 +82,41 @@ class VideoListScreen(Screen):
         self.app.push_screen(SelectDirectory(), _pick_directory_result)
 
     def refresh_table(self) -> None:
-        data_table = self.query_one(DataTable)
-        data_table.clear()
+        self.data_table.columns[self.imdb_tt_column_key].label = ' IMDB Number '
+        self.data_table.columns[self.imdb_name_column_key].label = ' IMDB Name '
+        self.data_table.columns[self.imdb_year_column_key].label = ' Year '
+        self.data_table.columns[self.filepath_column_key].label = ' File Path '
+
+        self.data_table.clear()
 
         if self.sort_by == VideoListScreen.SortByOptions.SORT_BY_FILEPATH:
             sorted_video_files = sorted(self.video_files.values(), key=lambda _video_file: _video_file.file_path.lower())
+            self.data_table.columns[self.filepath_column_key].label = '[reverse] File Path [/reverse]'
         elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_TT:
             sorted_video_files = sorted(self.video_files.values(), key=lambda _video_file: _video_file.imdb_tt.lower())
+            self.data_table.columns[self.imdb_tt_column_key].label = '[reverse] IMDB Number [/reverse]'
         else:
             sorted_video_files = sorted(self.video_files.values(), key=lambda _video_file: _video_file.imdb_name.lower())
+            self.data_table.columns[self.imdb_name_column_key].label = '[reverse] IMDB Name [/reverse]'
 
         for video_file in sorted_video_files:
             video_filename = Path(video_file.file_path).name
-            data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_filename, key=video_file.file_path)
+            self.data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_filename, key=video_file.file_path)
+
+        self.data_table.refresh()
 
     def add_video_file(self, video_file: VideoFile):
         if video_file.file_path not in self.video_files:
             self.video_files[video_file.file_path] = video_file
 
-            data_table = self.query_one(DataTable)
             video_filename = Path(video_file.file_path).name
-            data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_filename, key=video_file.file_path)
+            self.data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_filename, key=video_file.file_path)
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         self.post_message(LogMessage(f'[VideoListScreen] DataTable row selected: cursor_row={event.cursor_row}, key={event.row_key}'))
-        table = self.query_one(DataTable)
-        row_data = table.get_row_at(event.cursor_row)
+        row_data = self.data_table.get_row_at(event.cursor_row)
         self.post_message(LogMessage(f'[VideoListScreen] DataTable row data by index: {row_data}'))
-        row_data = table.get_row(event.row_key)
+        row_data = self.data_table.get_row(event.row_key)
         self.post_message(LogMessage(f'[VideoListScreen] DataTable row data by key: {row_data}'))
 
         file_path = event.row_key.value
