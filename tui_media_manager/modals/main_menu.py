@@ -12,6 +12,7 @@ class MainMenuModal(ModalScreen):
         LOAD_VIDEO_LIST = 'Load Video Data'
         SAVE_VIDEO_LIST = 'Save Video Data'
         PICK_A_DIRECTORY = 'Pick a Directory'
+        TEST_DIALOG = 'Test Dialog Box'
 
     CSS = """
          MainMenuModal {

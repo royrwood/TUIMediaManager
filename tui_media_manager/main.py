@@ -3,6 +3,7 @@ import textual
 
 from tui_media_manager.messages import LogMessage
 from tui_media_manager.modals.main_menu import MainMenuModal
+from tui_media_manager.modals.button_choices import ButtonChoicesModal
 from tui_media_manager.screens.runtime_log import RuntimeLogScreen
 from tui_media_manager.screens.video_list_screen import VideoListScreen
 
@@ -13,7 +14,8 @@ class MyApp(App):
 
     BINDINGS = [('m,escape', 'show_main_menu', 'Show Main Menu'),
                 ('l', 'show_log_screen', 'Show Log Screen'),
-                ('f', 'show_data_screen', 'Show Data Screen'), ]
+                ('f', 'show_data_screen', 'Show Data Screen'),
+                ('t', 'test_dialog', 'Test Dialog'), ]
 
     def __init__(self):
         super().__init__()
@@ -40,6 +42,8 @@ class MyApp(App):
                     self.switch_screen('log_screen')
                 elif action == MainMenuModal.MainMenuActions.SHOW_TABLE_SCREEN:
                     self.switch_screen('table_screen')
+                elif action == MainMenuModal.MainMenuActions.TEST_DIALOG:
+                    self.action_test_dialog()
 
         if not isinstance(self.screen, MainMenuModal):
             self.push_screen(MainMenuModal(), _do_main_menu_action)
@@ -57,6 +61,9 @@ class MyApp(App):
     def log_message(self, message: str) -> None:
         log_screen = self.get_screen('log_screen', RuntimeLogScreen)
         log_screen.info(message)
+
+    def action_test_dialog(self):
+        self.push_screen(ButtonChoicesModal('This is a test', ['One', 'Two', 'Three']))
 
 
 if __name__ == '__main__':
