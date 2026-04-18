@@ -62,16 +62,31 @@ class ShowMovieDetailsModal(ModalScreen):
         self.file_text_area.can_focus = False
         self.plot_text_area = TextArea(self.video_file.imdb_plot, read_only=True, show_cursor=False, id='plot_id')
         self.plot_text_area.can_focus = False
+        self.search_imdb_button = Button('Search IMDB', compact=True, id='search_imdb_id')
+        self.ok_button = Button('OK', compact=True, id='ok_id')
+
+        if self.video_file.imdb_plot:
+            self.ok_button.focus()
+        else:
+            self.search_imdb_button.focus()
 
     def compose(self) -> ComposeResult:
         yield Vertical(
             self.file_text_area,
             self.plot_text_area,
             Horizontal(
-                Button('Search IMDB', compact=True, id='search_imdb_id'),
-                Button('OK', compact=True, id='ok_id')
+                self.search_imdb_button,
+                self.ok_button
             )
         )
+
+    # def on_mount(self) -> None:
+    #     if self.video_file.imdb_plot:
+    #         button = self.query_one('#ok_id', Button)
+    #         button.focus()
+    #     else:
+    #         button = self.query_one('#search_imdb_id', Button)
+    #         button.focus()
 
     def action_do_cancel(self) -> None:
         self.dismiss(None)
@@ -100,6 +115,7 @@ class ShowMovieDetailsModal(ModalScreen):
         def _review_search_results_callback(imdb_info: IMDBInfo) -> None:
             if imdb_info is not None:
                 self.post_message(LogMessage(f'[ShowMovieDetailsModal] ReviewIMDBSearchResultsModal returned {imdb_info}'))
+                # TODO: Update VideoFile with IMDBInfo
 
         self.post_message(LogMessage(f'[ShowMovieDetailsModal] Showing ReviewIMDBSearchResultsModal'))
         self.app.push_screen(ReviewIMDBSearchResultsModal(imdb_info_list), _review_search_results_callback)

@@ -42,7 +42,7 @@ class ShowIMDBInfoModal(ModalScreen[IMDBInfo]):
      """
 
     BINDINGS = [('escape', 'do_cancel', 'Cancel')]
-    AUTO_FOCUS = "#cancel_id"
+    AUTO_FOCUS = "#accept_id"
 
     def __init__(self, imdb_info: IMDBInfo):
         super().__init__()

@@ -50,7 +50,6 @@ class ReviewIMDBSearchResultsModal(ModalScreen[IMDBInfo]):
      """
 
     BINDINGS = [('escape', 'do_cancel', 'Cancel')]
-    AUTO_FOCUS = "#accept_id"
 
     def __init__(self, imdb_info_list: list[IMDBInfo]):
         super().__init__()
