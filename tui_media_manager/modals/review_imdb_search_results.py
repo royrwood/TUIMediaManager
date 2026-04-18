@@ -117,10 +117,14 @@ class ReviewIMDBSearchResultsModal(ModalScreen[IMDBInfo]):
     @on(Button.Pressed, '#accept_id')
     def accept_button_pressed(self, event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'[ReviewIMDBSearchResultsModal] Button {event.button.id} pressed'))
-        # self.dismiss(imdb_info)
+        coordinate = self.data_table.cursor_coordinate
+        row_key = f'imdb_info_{coordinate.row}'
+        if row_key in self.imdb_response_info_by_row_key:
+            imdb_info = self.imdb_response_info_by_row_key[row_key]
+            self.dismiss(imdb_info)
 
     @on(Button.Pressed, '#cancel_id')
-    def accept_button_pressed(self, event: Button.Pressed) -> None:
+    def cancel_button_pressed(self, event: Button.Pressed) -> None:
         self.dismiss(None)
 
     def action_do_cancel(self) -> None:

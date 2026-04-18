@@ -114,8 +114,15 @@ class ShowMovieDetailsModal(ModalScreen):
     def review_imdb_search_results(self, imdb_info_list: list[IMDBInfo]):
         def _review_search_results_callback(imdb_info: IMDBInfo) -> None:
             if imdb_info is not None:
-                self.post_message(LogMessage(f'[ShowMovieDetailsModal] ReviewIMDBSearchResultsModal returned {imdb_info}'))
-                # TODO: Update VideoFile with IMDBInfo
+                self.post_message(LogMessage(f'[ShowMovieDetailsModal] Updating current VideoFile with returned IMDB data: {imdb_info}'))
+                self.video_file.imdb_tt = imdb_info.imdb_tt
+                self.video_file.imdb_name = imdb_info.imdb_name
+                self.video_file.imdb_year = imdb_info.imdb_year
+                self.video_file.imdb_rating = imdb_info.imdb_rating
+                self.video_file.imdb_genres = imdb_info.imdb_genres
+                self.video_file.imdb_plot = imdb_info.imdb_plot
+                self.plot_text_area.text = self.video_file.imdb_plot or ''
+                self.ok_button.focus()
 
         self.post_message(LogMessage(f'[ShowMovieDetailsModal] Showing ReviewIMDBSearchResultsModal'))
         self.app.push_screen(ReviewIMDBSearchResultsModal(imdb_info_list), _review_search_results_callback)
