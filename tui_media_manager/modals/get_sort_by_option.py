@@ -5,16 +5,14 @@ from textual.app import ComposeResult
 from textual.widgets import Label, ListItem, ListView
 
 
-class MainMenuModal(ModalScreen):
-    class MainMenuActions(StrEnum):
-        SHOW_TABLE_SCREEN = 'Show Data Table'
-        SHOW_LOG_SCREEN = 'Show Log'
-        LOAD_VIDEO_LIST = 'Load Video Data'
-        SAVE_VIDEO_LIST = 'Save Video Data'
-        PICK_A_DIRECTORY = 'Pick a Directory'
+class ChooseSortByOptionModal(ModalScreen):
+    class SortByOptions(StrEnum):
+        SORT_BY_NAME = 'Sort by Name'
+        SORT_BY_FILEPATH = 'Sort by Filepath'
+        SORT_BY_IMDB_TT = 'Sort by IMDB Number'
 
     CSS = """
-         MainMenuModal {
+         ChooseSortByOptionModal {
              align-horizontal: center;
 
              & > ListView {
@@ -37,13 +35,13 @@ class MainMenuModal(ModalScreen):
     def compose(self) -> ComposeResult:
         # Use a ListView so arrow keys can navigate up and down in the list
         with ListView():
-            for menu_action in MainMenuModal.MainMenuActions:
+            for menu_action in ChooseSortByOptionModal.SortByOptions:
                 yield ListItem(Label(str(menu_action.value)), id=menu_action.name)
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        # main_menu_actions_enum = MainMenuActions[event.item.id]  # Pycharm linter complains about this because MainMenuActions is a StrEnum, not a plain Enum
-        main_menu_actions_enum = getattr(MainMenuModal.MainMenuActions, event.item.id)  # Pycharm linter likes this way of getting the enum by name-- FINE, WHATEVER.
-        self.dismiss(main_menu_actions_enum)
+        # sort_by_option = ChooseSortByOptionModal.SortByOptions[event.item.id]  # Pycharm linter complains about this because SortByOptions is a StrEnum, not a plain Enum
+        sort_by_option = getattr(ChooseSortByOptionModal.SortByOptions, event.item.id)  # Pycharm linter likes this way of getting the enum by name-- FINE, WHATEVER.
+        self.dismiss(sort_by_option)
 
     def action_do_cancel(self) -> None:
         self.dismiss(None)

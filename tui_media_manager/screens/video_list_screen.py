@@ -7,15 +7,17 @@ from textual_fspicker import SelectDirectory, FileOpen, FileSave
 from textual.screen import Screen
 from textual.app import ComposeResult
 from textual.widgets import DataTable, Footer
-from textual.worker import WorkerState
 
 from tui_media_manager.imdb.utils import VideoFile
 from tui_media_manager.messages import LogMessage
 from tui_media_manager.modals.show_movie_details import ShowMovieDetailsModal
 from tui_media_manager.modals.video_file_scanner import VideoFileScannerModal
+from tui_media_manager.modals.get_sort_by_option import ChooseSortByOptionModal
 
 
 class VideoListScreen(Screen):
+    BINDINGS = [('s', 'sort_video_list', 'Sort List'), ]
+
     def __init__(self) -> None:
         super().__init__()
         self.video_files: dict[str, VideoFile] = dict()
@@ -27,7 +29,6 @@ class VideoListScreen(Screen):
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
         table.add_columns('IMDB', 'Name', 'Year', 'File')
-        # table.add_row('', '', '', '')
 
     def load_video_files(self):
         def _file_open_result(file_path: Path | None) -> Path | None:
@@ -95,3 +96,11 @@ class VideoListScreen(Screen):
         # self.post_message(ShowMovieDetailsMessage(video_file))
 
         self.app.push_screen(ShowMovieDetailsModal(video_file))
+
+    def action_sort_video_list(self):
+        def _get_sort_option_result(sort_by_option: ChooseSortByOptionModal.SortByOptions | None) -> Path | None:
+            self.post_message(LogMessage(f'[VideoListScreen] Chose sort option: {sort_by_option.name} {sort_by_option.value}'))
+            if sort_by_option:
+                pass
+
+        self.app.push_screen(ChooseSortByOptionModal(), _get_sort_option_result)
