@@ -5,6 +5,7 @@ import json
 
 from textual_fspicker import SelectDirectory, FileOpen, FileSave
 
+from textual import on
 from textual.screen import Screen
 from textual.app import ComposeResult
 from textual.widgets import DataTable, Footer
@@ -19,17 +20,21 @@ from tui_media_manager.modals.button_choices import ButtonChoicesModal
 
 class VideoListScreen(Screen):
     class SortByOptions(StrEnum):
-        SORT_BY_NAME = 'Sort by IMDB Name'
-        SORT_BY_FILEPATH = 'Sort by File Path'
-        SORT_BY_IMDB_TT = 'Sort by IMDB Number'
-        SORT_BY_IMDB_RATING = 'Sort by IMDB Rating'
+        SORT_BY_NAME_ASCENDING = 'Sort by IMDB Name Ascending'
+        SORT_BY_NAME_DESCENDING = 'Sort by IMDB Name Descending'
+        SORT_BY_FILEPATH_ASCENDING = 'Sort by File Path Ascending'
+        SORT_BY_FILEPATH_DESCENDING = 'Sort by File Path Descending'
+        SORT_BY_IMDB_TT_ASCENDING = 'Sort by IMDB Number Ascending'
+        SORT_BY_IMDB_TT_DESCENDING = 'Sort by IMDB Number Descending'
+        SORT_BY_IMDB_RATING_ASCENDING = 'Sort by IMDB Rating Ascending'
+        SORT_BY_IMDB_RATING_DESCENDING = 'Sort by IMDB Rating Descending'
 
     BINDINGS = [('s', 'sort_video_list', 'Sort List'), ]
 
     def __init__(self) -> None:
         super().__init__()
         self.video_files: dict[str, VideoFile] = dict()
-        self.sort_by = self.SortByOptions.SORT_BY_FILEPATH
+        self.sort_by = self.SortByOptions.SORT_BY_NAME_ASCENDING
         self.data_table: DataTable = DataTable(show_header=True, cell_padding=2, header_height=1, cursor_type='row', id='video_files')
         self.imdb_tt_column_key = None
         self.imdb_name_column_key = None
@@ -42,11 +47,11 @@ class VideoListScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.imdb_tt_column_key = self.data_table.add_column(' IMDB Number ')
-        self.imdb_name_column_key = self.data_table.add_column(' IMDB Name ')
-        self.imdb_year_column_key = self.data_table.add_column(' Year ')
-        self.imdb_rating_column_key = self.data_table.add_column(' Rating ')
-        self.filepath_column_key = self.data_table.add_column('[reverse] File Path [/reverse]')
+        self.imdb_tt_column_key = self.data_table.add_column(' IMDB Number  ')
+        self.imdb_name_column_key = self.data_table.add_column(' IMDB Name  ')
+        self.imdb_year_column_key = self.data_table.add_column(' Year  ')
+        self.imdb_rating_column_key = self.data_table.add_column(' Rating  ')
+        self.filepath_column_key = self.data_table.add_column('[reverse] File Path  [/reverse]')
 
     def load_video_files(self):
         def _file_open_result(file_path: Path | None) -> Path | None:
@@ -58,7 +63,9 @@ class VideoListScreen(Screen):
                 for video_file_dict in video_files_json:
                     video_file_path = video_file_dict['file_path']
                     self.video_files[video_file_path] = VideoFile(**video_file_dict)
-                self.refresh_table()
+                row_data = [(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_file.imdb_rating, Path(video_file.file_path).name) for video_file in self.video_files.values()]
+                self.data_table.add_rows(row_data)
+                self.sort_table()
 
         self.app.push_screen(FileOpen(), _file_open_result)
 
@@ -95,31 +102,37 @@ class VideoListScreen(Screen):
 
         self.app.push_screen(ButtonChoicesModal('Get full or brief IMDB info?', ['Full', 'Brief']), _button_choice_modal_callback)
 
-    def refresh_table(self) -> None:
-        self.data_table.columns[self.imdb_tt_column_key].label = 'IMDB Number'
-        self.data_table.columns[self.imdb_name_column_key].label = 'IMDB Name'
-        self.data_table.columns[self.imdb_year_column_key].label = 'Year'
-        self.data_table.columns[self.imdb_rating_column_key].label = 'Rating'
-        self.data_table.columns[self.filepath_column_key].label = 'File Path'
+    def sort_table(self) -> None:
+        self.data_table.columns[self.imdb_tt_column_key].label = 'IMDB Number  '
+        self.data_table.columns[self.imdb_name_column_key].label = 'IMDB Name  '
+        self.data_table.columns[self.imdb_year_column_key].label = 'Year  '
+        self.data_table.columns[self.imdb_rating_column_key].label = 'Rating  '
+        self.data_table.columns[self.filepath_column_key].label = 'File Path  '
 
-        self.data_table.clear()
-
-        if self.sort_by == VideoListScreen.SortByOptions.SORT_BY_FILEPATH:
-            sorted_video_files = sorted(self.video_files.values(), key=lambda _video_file: _video_file.file_path.lower())
-            self.data_table.columns[self.filepath_column_key].label = '[reverse] File Path [/reverse]'
-        elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_TT:
-            sorted_video_files = sorted(self.video_files.values(), key=lambda _video_file: _video_file.imdb_tt.lower())
-            self.data_table.columns[self.imdb_tt_column_key].label = '[reverse] IMDB Number [/reverse]'
-        elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_RATING:
-            sorted_video_files = sorted(self.video_files.values(), key=lambda _video_file: float(_video_file.imdb_rating) if _video_file.imdb_rating else 0.0)
-            self.data_table.columns[self.imdb_rating_column_key].label = '[reverse] Rating [/reverse]'
-        else:
-            sorted_video_files = sorted(self.video_files.values(), key=lambda _video_file: _video_file.imdb_name.lower())
-            self.data_table.columns[self.imdb_name_column_key].label = '[reverse] IMDB Name [/reverse]'
-
-        for video_file in sorted_video_files:
-            video_filename = Path(video_file.file_path).name
-            self.data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_file.imdb_rating, video_filename, key=video_file.file_path)
+        if self.sort_by == VideoListScreen.SortByOptions.SORT_BY_FILEPATH_ASCENDING:
+            self.data_table.columns[self.filepath_column_key].label = '[reverse] File Path \u2193 [/reverse]'
+            self.data_table.sort(key=lambda row: row[4].lower())
+        elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_FILEPATH_DESCENDING:
+            self.data_table.columns[self.filepath_column_key].label = '[reverse] File Path \u2193[/reverse]'
+            self.data_table.sort(key=lambda row: row[4].lower(), reverse=True)
+        elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_TT_ASCENDING:
+            self.data_table.columns[self.imdb_tt_column_key].label = '[reverse] IMDB Number \u2193[/reverse]'
+            self.data_table.sort(key=lambda row: row[0].lower())
+        elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_TT_DESCENDING:
+            self.data_table.columns[self.imdb_tt_column_key].label = '[reverse] IMDB Number \u2193[/reverse]'
+            self.data_table.sort(key=lambda row: row[0].lower(), reverse=True)
+        elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_RATING_ASCENDING:
+            self.data_table.columns[self.imdb_rating_column_key].label = '[reverse] Rating \u2193[/reverse]'
+            self.data_table.sort(key=lambda row: float(row[3]) if row[3] else 0.0)
+        elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_RATING_DESCENDING:
+            self.data_table.columns[self.imdb_rating_column_key].label = '[reverse] Rating \u2193[/reverse]'
+            self.data_table.sort(key=lambda row: float(row[3]) if row[3] else 0.0, reverse=True)
+        elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_NAME_ASCENDING:
+            self.data_table.columns[self.imdb_name_column_key].label = '[reverse] IMDB Name \u2193[/reverse]'
+            self.data_table.sort(key=lambda row: row[4].lower())
+        elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_NAME_DESCENDING:
+            self.data_table.columns[self.imdb_name_column_key].label = '[reverse] IMDB Name \u2193[/reverse]'
+            self.data_table.sort(key=lambda row: row[4].lower(), reverse=True)
 
         self.data_table.refresh()
 
@@ -149,6 +162,24 @@ class VideoListScreen(Screen):
             self.post_message(LogMessage(f'[VideoListScreen] Chose sort option: {sort_by_option.name} {sort_by_option.value}'))
             if sort_by_option:
                 self.sort_by = sort_by_option
-                self.refresh_table()
+                self.sort_table()
 
         self.app.push_screen(PopupMenuModal(VideoListScreen.SortByOptions), _get_sort_option_result)
+
+    @on(DataTable.HeaderSelected)
+    def on_header_clicked(self, event: DataTable.HeaderSelected) -> None:
+        column_key = event.column_key
+
+        prev_sort_by = self.sort_by
+
+        if column_key == self.imdb_tt_column_key:
+            self.sort_by = VideoListScreen.SortByOptions.SORT_BY_IMDB_TT_DESCENDING if prev_sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_TT_ASCENDING else VideoListScreen.SortByOptions.SORT_BY_IMDB_TT_ASCENDING
+        elif column_key == self.imdb_name_column_key:
+            self.sort_by = VideoListScreen.SortByOptions.SORT_BY_NAME_DESCENDING if prev_sort_by == VideoListScreen.SortByOptions.SORT_BY_NAME_ASCENDING else VideoListScreen.SortByOptions.SORT_BY_NAME_ASCENDING
+        elif column_key == self.imdb_rating_column_key:
+            self.sort_by = VideoListScreen.SortByOptions.SORT_BY_IMDB_RATING_DESCENDING if prev_sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_RATING_ASCENDING else VideoListScreen.SortByOptions.SORT_BY_IMDB_RATING_ASCENDING
+        elif column_key == self.filepath_column_key:
+            self.sort_by = VideoListScreen.SortByOptions.SORT_BY_FILEPATH_DESCENDING if prev_sort_by == VideoListScreen.SortByOptions.SORT_BY_FILEPATH_ASCENDING else VideoListScreen.SortByOptions.SORT_BY_FILEPATH_ASCENDING
+
+        if self.sort_by != prev_sort_by:
+            self.sort_table()
