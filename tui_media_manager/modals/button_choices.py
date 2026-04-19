@@ -10,33 +10,37 @@ class ButtonChoicesModal(ModalScreen[str]):
     CSS = """
         ButtonChoicesModal {
             align-horizontal: center;
-            
+        
             & > Vertical {
                 width: auto;
                 height: auto;
                 offset-y: 25vh;
                 border: round $primary;
                 padding: 1 2;
-                
+        
                 & > Label {
-                    width: 100%;
+                    width: auto;
+                    min-width: 100%;
                     margin-bottom: 1;
                 }
-                                
+        
                 & > Horizontal {
                     width: auto;
+                    min-width: 100%;
                     height: auto;
                     align-horizontal: right;
-                
+        
                     & > Button {
                         width: auto;
                         margin: 0 1;
                     }
                 }
             }
-        }   
+        }
      """
 
+    BINDINGS = [('escape', 'do_cancel', 'Cancel')]
+    
     def __init__(self, prompt: str, button_text_list: list[str]):
         super().__init__()
         self.prompt = Label(prompt)
@@ -49,5 +53,8 @@ class ButtonChoicesModal(ModalScreen[str]):
         )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        self.post_message(LogMessage(f'[ButtonChoicesModal] Button pressed: {event.button.id}'))
-        self.dismiss(event.button.id)
+        self.post_message(LogMessage(f'[ButtonChoicesModal] Button pressed: id={event.button.id} label={event.button.label}'))
+        self.dismiss(event.button.label)
+
+    def action_do_cancel(self) -> None:
+        self.dismiss(None)
