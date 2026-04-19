@@ -4,7 +4,6 @@ from textual.app import App
 import textual
 
 from tui_media_manager.messages import LogMessage
-from tui_media_manager.modals.button_choices import ButtonChoicesModal
 from tui_media_manager.modals.popup_menu import PopupMenuModal
 from tui_media_manager.screens.runtime_log import RuntimeLogScreen
 from tui_media_manager.screens.video_list_screen import VideoListScreen
@@ -17,15 +16,13 @@ class MyApp(App):
         LOAD_VIDEO_LIST = 'Load Video Data'
         SAVE_VIDEO_LIST = 'Save Video Data'
         PICK_A_DIRECTORY = 'Pick a Directory'
-        TEST_DIALOG = 'Test Dialog Box'
 
     SCREENS = {'log_screen': RuntimeLogScreen,
                'table_screen': VideoListScreen, }
 
     BINDINGS = [('m,escape', 'show_main_menu', 'Show Main Menu'),
                 ('l', 'show_log_screen', 'Show Log Screen'),
-                ('f', 'show_data_screen', 'Show Data Screen'),
-                ('t', 'test_dialog', 'Test Dialog'), ]
+                ('f', 'show_data_screen', 'Show Data Screen')]
 
     def __init__(self):
         super().__init__()
@@ -52,8 +49,6 @@ class MyApp(App):
                     self.switch_screen('log_screen')
                 elif action == MyApp.MainMenuActions.SHOW_TABLE_SCREEN:
                     self.switch_screen('table_screen')
-                elif action == MyApp.MainMenuActions.TEST_DIALOG:
-                    self.action_test_dialog()
 
         if not isinstance(self.screen, PopupMenuModal):
             self.push_screen(PopupMenuModal(MyApp.MainMenuActions), _do_main_menu_action)
@@ -71,12 +66,6 @@ class MyApp(App):
     def log_message(self, message: str) -> None:
         log_screen = self.get_screen('log_screen', RuntimeLogScreen)
         log_screen.info(message)
-
-    def action_test_dialog(self):
-        def _button_choice_modal_callback(button_choice: str | None) -> None:
-            self.log_message(f'[MyApp] Got button_choice="{button_choice}"')
-
-        self.push_screen(ButtonChoicesModal('This is a test', ['One', 'Two', 'Three']), _button_choice_modal_callback)
 
 
 if __name__ == '__main__':
