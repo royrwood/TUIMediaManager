@@ -1,14 +1,24 @@
+from enum import StrEnum
+
 from textual.app import App
 import textual
 
 from tui_media_manager.messages import LogMessage
-from tui_media_manager.modals.main_menu import MainMenuModal
 from tui_media_manager.modals.button_choices import ButtonChoicesModal
+from tui_media_manager.modals.popup_menu import PopupMenuModal
 from tui_media_manager.screens.runtime_log import RuntimeLogScreen
 from tui_media_manager.screens.video_list_screen import VideoListScreen
 
 
 class MyApp(App):
+    class MainMenuActions(StrEnum):
+        SHOW_TABLE_SCREEN = 'Show Data Table'
+        SHOW_LOG_SCREEN = 'Show Log'
+        LOAD_VIDEO_LIST = 'Load Video Data'
+        SAVE_VIDEO_LIST = 'Save Video Data'
+        PICK_A_DIRECTORY = 'Pick a Directory'
+        TEST_DIALOG = 'Test Dialog Box'
+
     SCREENS = {'log_screen': RuntimeLogScreen,
                'table_screen': VideoListScreen, }
 
@@ -28,25 +38,25 @@ class MyApp(App):
         self.action_show_main_menu()
 
     def action_show_main_menu(self):
-        def _do_main_menu_action(action: MainMenuModal.MainMenuActions | None) -> None:
+        def _do_main_menu_action(action: MyApp.MainMenuActions | None) -> None:
             if action is not None:
                 self.log_message(f'Received MainMenuAction = {action.name}')
 
-                if action == MainMenuModal.MainMenuActions.SAVE_VIDEO_LIST:
+                if action == MyApp.MainMenuActions.SAVE_VIDEO_LIST:
                     self.table_screen.save_video_files()
-                elif action == MainMenuModal.MainMenuActions.LOAD_VIDEO_LIST:
+                elif action == MyApp.MainMenuActions.LOAD_VIDEO_LIST:
                     self.table_screen.load_video_files()
-                elif action == MainMenuModal.MainMenuActions.PICK_A_DIRECTORY:
+                elif action == MyApp.MainMenuActions.PICK_A_DIRECTORY:
                     self.table_screen.pick_a_directory_and_start_scanning()
-                elif action == MainMenuModal.MainMenuActions.SHOW_LOG_SCREEN:
+                elif action == MyApp.MainMenuActions.SHOW_LOG_SCREEN:
                     self.switch_screen('log_screen')
-                elif action == MainMenuModal.MainMenuActions.SHOW_TABLE_SCREEN:
+                elif action == MyApp.MainMenuActions.SHOW_TABLE_SCREEN:
                     self.switch_screen('table_screen')
-                elif action == MainMenuModal.MainMenuActions.TEST_DIALOG:
+                elif action == MyApp.MainMenuActions.TEST_DIALOG:
                     self.action_test_dialog()
 
-        if not isinstance(self.screen, MainMenuModal):
-            self.push_screen(MainMenuModal(), _do_main_menu_action)
+        if not isinstance(self.screen, PopupMenuModal):
+            self.push_screen(PopupMenuModal(MyApp.MainMenuActions), _do_main_menu_action)
 
     def action_show_log_screen(self):
         self.switch_screen('log_screen')
