@@ -92,7 +92,8 @@ class VideoFileScannerModal(ModalScreen):
                           progress_update_cb: Callable[[dict], None],
                           scanning_complete_cb: Callable[[], None],
                           add_video_file_cb: Callable[[VideoFile], None],
-                          include_extensions: str = None) -> None:
+                          include_extensions: str = None,
+                          get_full_info: bool = True) -> None:
         try:
             if include_extensions is None:
                 include_extensions = 'mkv,mp4'
@@ -118,23 +119,25 @@ class VideoFileScannerModal(ModalScreen):
 
                     progress_update_cb({'filename': filename, 'progress': 'Finding basic IMDB info...'})
                     imdb_info_list = await get_imdb_basic_info(scrubbed_video_file_name, scrubbed_year, num_matches=1)
-                    imdb_basic_info = imdb_info_list[0]
-                    if imdb_basic_info:
+                    imdb_info = imdb_info_list[0]
+                    if imdb_info:
                         progress_update_cb({'filename': filename, 'progress': 'Found basic IMDB info'})
 
-                        progress_update_cb({'filename': filename, 'progress': 'Finding detailed IMDB info...'})
-                        imdb_full_info = await get_imdb_details(imdb_basic_info.imdb_tt)
-                        progress_update_cb({'filename': filename, 'progress': 'Found detailed IMDB info'})
+                        if get_full_info:
+                            progress_update_cb({'filename': filename, 'progress': 'Finding detailed IMDB info...'})
+                            imdb_info = await get_imdb_details(imdb_info.imdb_tt)
+                            progress_update_cb({'filename': filename, 'progress': 'Found detailed IMDB info'})
 
                         video_file = VideoFile(file_path=file_path,
                                                scrubbed_file_name=scrubbed_video_file_name,
                                                scrubbed_file_year=scrubbed_year,
-                                               imdb_tt=imdb_full_info.imdb_tt,
-                                               imdb_name=imdb_full_info.imdb_name,
-                                               imdb_year=imdb_full_info.imdb_year,
-                                               imdb_rating=imdb_full_info.imdb_rating,
-                                               imdb_plot=imdb_full_info.imdb_plot,
-                                               imdb_genres=imdb_full_info.imdb_genres)
+                                               imdb_tt=imdb_info.imdb_tt,
+                                               imdb_name=imdb_info.imdb_name,
+                                               imdb_year=imdb_info.imdb_year,
+                                               imdb_rating=imdb_info.imdb_rating,
+                                               imdb_plot=imdb_info.imdb_plot,
+                                               imdb_genres=imdb_info.imdb_genres)
+
                         add_video_file_cb(video_file)
 
             progress_update_cb({'filename': str(folder_path), 'progress': 'End processing directory'})

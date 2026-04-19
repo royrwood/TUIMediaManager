@@ -73,7 +73,10 @@ class MyApp(App):
         log_screen.info(message)
 
     def action_test_dialog(self):
-        self.push_screen(ButtonChoicesModal('This is a test', ['One', 'Two', 'Three']))
+        def _button_choice_modal_callback(button_choice: str | None) -> None:
+            self.log_message(f'[MyApp] Got button_choice="{button_choice}"')
+
+        self.push_screen(ButtonChoicesModal('This is a test', ['One', 'Two', 'Three']), _button_choice_modal_callback)
 
 
 if __name__ == '__main__':

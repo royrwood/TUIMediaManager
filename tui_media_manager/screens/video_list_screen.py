@@ -14,6 +14,7 @@ from tui_media_manager.messages import LogMessage
 from tui_media_manager.modals.show_movie_details import ShowMovieDetailsModal
 from tui_media_manager.modals.video_file_scanner import VideoFileScannerModal
 from tui_media_manager.modals.popup_menu import PopupMenuModal
+from tui_media_manager.modals.button_choices import ButtonChoicesModal
 
 
 class VideoListScreen(Screen):
@@ -80,9 +81,16 @@ class VideoListScreen(Screen):
         def _pick_directory_result(directory_path: Path | None) -> Path | None:
             self.post_message(LogMessage(f'[VideoListScreen] Selected directory: {directory_path}'))
             if directory_path:
-                self.app.push_screen(VideoFileScannerModal(directory_path, add_video_file_cb=self.add_video_file))
+                self.get_scan_options_and_start_scanning(directory_path)
 
         self.app.push_screen(SelectDirectory(), _pick_directory_result)
+
+    def get_scan_options_and_start_scanning(self, directory_path: Path) -> None:
+        def _button_choice_modal_callback(button_choice: str | None) -> None:
+            self.post_message(LogMessage(f'[VideoListScreen] Got button_choice="{button_choice}"'))
+            # self.app.push_screen(VideoFileScannerModal(directory_path, add_video_file_cb=self.add_video_file))
+
+        self.app.push_screen(ButtonChoicesModal('Get full IMDB info or just IMDB number and title?', ['Full', 'Number/Title']), _button_choice_modal_callback)
 
     def refresh_table(self) -> None:
         self.data_table.columns[self.imdb_tt_column_key].label = 'IMDB Number'
