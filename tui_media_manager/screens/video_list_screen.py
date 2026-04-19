@@ -62,9 +62,10 @@ class VideoListScreen(Screen):
                 self.video_files = dict()
                 for video_file_dict in video_files_json:
                     video_file_path = video_file_dict['file_path']
-                    self.video_files[video_file_path] = VideoFile(**video_file_dict)
-                row_data = [(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_file.imdb_rating, Path(video_file.file_path).name) for video_file in self.video_files.values()]
-                self.data_table.add_rows(row_data)
+                    video_file = VideoFile(**video_file_dict)
+                    video_filename = Path(video_file.file_path).name
+                    self.video_files[video_file_path] = video_file
+                    self.data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_file.imdb_rating, video_filename, key=video_file.file_path)
                 self.sort_table()
 
         self.app.push_screen(FileOpen(), _file_open_result)
