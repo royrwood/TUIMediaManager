@@ -40,11 +40,12 @@ class VideoFileScannerModal(ModalScreen):
         }   
      """
 
-    def __init__(self, directory_path: Path, add_video_file_cb: Callable[[VideoFile], None]):
+    def __init__(self, directory_path: Path, add_video_file_cb: Callable[[VideoFile], None], do_full_imdb_fetch):
         super().__init__()
         self.directory_path = directory_path
         self.directory_scan_worker = None
         self.add_video_file_cb = add_video_file_cb
+        self.do_full_imdb_fetch = do_full_imdb_fetch
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -72,7 +73,11 @@ class VideoFileScannerModal(ModalScreen):
             self.dismiss()
 
         self.post_message(LogMessage(f'[VideoFileScannerModal] Starting worker to scan directory {self.directory_path}...'))
-        self.directory_scan_worker = self.run_worker(self.scan_folder(self.directory_path, _progress_update, _scanning_complete, self.add_video_file_cb))
+        self.directory_scan_worker = self.run_worker(self.scan_folder(folder_path=self.directory_path,
+                                                                      progress_update_cb=_progress_update,
+                                                                      scanning_complete_cb=_scanning_complete,
+                                                                      add_video_file_cb=self.add_video_file_cb,
+                                                                      get_full_info=self.do_full_imdb_fetch))
         self.post_message(LogMessage(f'[VideoFileScannerModal] Started worker to scan directory {self.directory_path}'))
 
     @on(Button.Pressed, '#cancel_id')

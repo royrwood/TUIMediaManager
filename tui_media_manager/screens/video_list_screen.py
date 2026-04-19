@@ -88,9 +88,12 @@ class VideoListScreen(Screen):
     def get_scan_options_and_start_scanning(self, directory_path: Path) -> None:
         def _button_choice_modal_callback(button_choice: str | None) -> None:
             self.post_message(LogMessage(f'[VideoListScreen] Got button_choice="{button_choice}"'))
-            # self.app.push_screen(VideoFileScannerModal(directory_path, add_video_file_cb=self.add_video_file))
+            if button_choice == 'Full':
+                self.app.push_screen(VideoFileScannerModal(directory_path, add_video_file_cb=self.add_video_file, do_full_imdb_fetch=True))
+            elif button_choice == 'Brief':
+                self.app.push_screen(VideoFileScannerModal(directory_path, add_video_file_cb=self.add_video_file, do_full_imdb_fetch=False))
 
-        self.app.push_screen(ButtonChoicesModal('Get full IMDB info or just IMDB number and title?', ['Full', 'Number/Title']), _button_choice_modal_callback)
+        self.app.push_screen(ButtonChoicesModal('Get full or brief IMDB info?', ['Full', 'Brief']), _button_choice_modal_callback)
 
     def refresh_table(self) -> None:
         self.data_table.columns[self.imdb_tt_column_key].label = 'IMDB Number'
@@ -125,7 +128,9 @@ class VideoListScreen(Screen):
             self.video_files[video_file.file_path] = video_file
 
             video_filename = Path(video_file.file_path).name
-            self.data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_filename, key=video_file.file_path)
+            self.data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_file.imdb_rating, video_filename, key=video_file.file_path)
+
+            # TODO: Sorting without horrible performance hit....?
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         self.post_message(LogMessage(f'[VideoListScreen] DataTable row selected: cursor_row={event.cursor_row}, key={event.row_key}'))
