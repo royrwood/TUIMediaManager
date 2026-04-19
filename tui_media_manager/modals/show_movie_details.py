@@ -80,14 +80,6 @@ class ShowMovieDetailsModal(ModalScreen):
             )
         )
 
-    # def on_mount(self) -> None:
-    #     if self.video_file.imdb_plot:
-    #         button = self.query_one('#ok_id', Button)
-    #         button.focus()
-    #     else:
-    #         button = self.query_one('#search_imdb_id', Button)
-    #         button.focus()
-
     def action_do_cancel(self) -> None:
         self.dismiss(None)
 
@@ -122,7 +114,11 @@ class ShowMovieDetailsModal(ModalScreen):
                 self.video_file.imdb_genres = imdb_info.imdb_genres
                 self.video_file.imdb_plot = imdb_info.imdb_plot
                 self.plot_text_area.text = self.video_file.imdb_plot or ''
-                self.ok_button.focus()
+
+                # self.ok_button.focus()
+
+                # User accepted search, so close this dialog
+                self.dismiss(None)
 
         self.post_message(LogMessage(f'[ShowMovieDetailsModal] Showing ReviewIMDBSearchResultsModal'))
         self.app.push_screen(ReviewIMDBSearchResultsModal(imdb_info_list), _review_search_results_callback)
