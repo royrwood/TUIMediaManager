@@ -15,7 +15,7 @@ from tui_media_manager.messages import LogMessage
 from tui_media_manager.imdb.utils import scrub_video_file_name, get_imdb_basic_info, get_imdb_details
 
 
-class VideoFileScannerModal(ModalScreen):
+class VideoFileScannerModal(ModalScreen[bool]):
     CSS = """
         VideoFileScannerModal {
             align-horizontal: center;
@@ -70,7 +70,7 @@ class VideoFileScannerModal(ModalScreen):
 
         def _scanning_complete() -> None:
             self.post_message(LogMessage(f'[VideoFileScannerModal] Directory scanning complete; dismissing VideoFileScannerModal'))
-            self.dismiss()
+            self.dismiss(True)
 
         self.post_message(LogMessage(f'[VideoFileScannerModal] Starting worker to scan directory {self.directory_path}...'))
         self.directory_scan_worker = self.run_worker(self.scan_folder(folder_path=self.directory_path,

@@ -50,10 +50,10 @@ class VideoListScreen(Screen):
 
     def on_mount(self) -> None:
         self.imdb_tt_column_key = self.data_table.add_column(' IMDB Number  ')
-        self.imdb_name_column_key = self.data_table.add_column(' IMDB Name  ')
+        self.imdb_name_column_key = self.data_table.add_column('[reverse]  IMDB Name \u2191 [/reverse]')
         self.imdb_year_column_key = self.data_table.add_column(' Year  ')
         self.imdb_rating_column_key = self.data_table.add_column(' Rating  ')
-        self.filepath_column_key = self.data_table.add_column('[reverse] File Name  [/reverse]')
+        self.filepath_column_key = self.data_table.add_column(' Name ')
 
     def load_video_files(self):
         def _file_open_result(file_path: Path | None) -> Path | None:
@@ -99,11 +99,20 @@ class VideoListScreen(Screen):
         def _button_choice_modal_callback(button_choice: str | None) -> None:
             self.post_message(LogMessage(f'[VideoListScreen] Got button_choice="{button_choice}"'))
             if button_choice == 'Full':
-                self.app.push_screen(VideoFileScannerModal(directory_path, add_video_file_cb=self.add_video_file, do_full_imdb_fetch=True))
+                self.start_scanning_directory(directory_path, do_full_imdb_fetch=True)
             elif button_choice == 'Brief':
-                self.app.push_screen(VideoFileScannerModal(directory_path, add_video_file_cb=self.add_video_file, do_full_imdb_fetch=False))
+                self.start_scanning_directory(directory_path, do_full_imdb_fetch=False)
+            else:
+                self.post_message(LogMessage(f'[VideoListScreen] User cancelled scanning option dialog'))
 
         self.app.push_screen(ButtonChoicesModal('Get full or brief IMDB info?', ['Full', 'Brief']), _button_choice_modal_callback)
+
+    def start_scanning_directory(self, directory_path: Path, do_full_imdb_fetch: bool) -> None:
+        def _scanning_complete_callback(_scan_result: bool) -> None:
+            self.post_message(LogMessage(f'[VideoListScreen] Scanning complete for directory "{directory_path}"'))
+            self.sort_table()
+
+        self.app.push_screen(VideoFileScannerModal(directory_path, add_video_file_cb=self.add_video_file, do_full_imdb_fetch=do_full_imdb_fetch), _scanning_complete_callback)
 
     def sort_table(self) -> None:
         self.data_table.columns[self.imdb_tt_column_key].label = 'IMDB Number  '
