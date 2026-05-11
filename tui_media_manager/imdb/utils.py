@@ -19,6 +19,7 @@ class VideoFile:
     imdb_rating: str = ''
     imdb_genres: list[str] = None
     imdb_plot: str = None
+    video_resolution: tuple[int, int] = None
 
 
 @dataclasses.dataclass

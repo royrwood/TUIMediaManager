@@ -3,7 +3,6 @@ from textual.screen import ModalScreen
 from textual.app import ComposeResult
 from textual.widgets import TextArea, Button
 from textual.containers import Vertical, Horizontal
-from textual.worker import WorkerState
 
 from tui_media_manager.imdb.utils import VideoFile, IMDBInfo
 from tui_media_manager.messages import LogMessage
@@ -118,7 +117,7 @@ class ShowMovieDetailsModal(ModalScreen):
                 # self.ok_button.focus()
 
                 # User accepted search, so close this dialog
-                self.dismiss(None)
+                self.dismiss(self.video_file)
 
         self.post_message(LogMessage(f'[ShowMovieDetailsModal] Showing ReviewIMDBSearchResultsModal'))
         self.app.push_screen(ReviewIMDBSearchResultsModal(imdb_info_list), _review_search_results_callback)
@@ -131,4 +130,4 @@ class ShowMovieDetailsModal(ModalScreen):
     @on(Button.Pressed, '#ok_id')
     def ok_button_pressed(self, event: Button.Pressed) -> None:
         self.post_message(LogMessage(f'[ShowMovieDetailsModal] Button {event.button.id} pressed'))
-        self.dismiss(None)
+        self.dismiss(self.video_file)

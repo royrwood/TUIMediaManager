@@ -3,6 +3,8 @@ from pathlib import Path
 import os
 import asyncio
 
+import cv2
+
 from textual import on
 from textual.screen import ModalScreen
 from textual.app import ComposeResult
@@ -133,6 +135,10 @@ class VideoFileScannerModal(ModalScreen[bool]):
                             imdb_info = await get_imdb_details(imdb_info.imdb_tt)
                             progress_update_cb({'filename': filename, 'progress': 'Found detailed IMDB info'})
 
+                        cv2_video = cv2.VideoCapture(file_path)
+                        cv2_width = int(cv2_video.get(cv2.CAP_PROP_FRAME_WIDTH))
+                        cv2_height = int(cv2_video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
                         video_file = VideoFile(file_path=file_path,
                                                scrubbed_file_name=scrubbed_video_file_name,
                                                scrubbed_file_year=scrubbed_year,
@@ -141,7 +147,8 @@ class VideoFileScannerModal(ModalScreen[bool]):
                                                imdb_year=imdb_info.imdb_year,
                                                imdb_rating=imdb_info.imdb_rating,
                                                imdb_plot=imdb_info.imdb_plot,
-                                               imdb_genres=imdb_info.imdb_genres)
+                                               imdb_genres=imdb_info.imdb_genres,
+                                               video_resolution=(cv2_width, cv2_height))
 
                         add_video_file_cb(video_file)
 

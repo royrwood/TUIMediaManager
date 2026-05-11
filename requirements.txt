@@ -1,5 +1,6 @@
 aiohttp
 imdbinfo
+opencv-python
 parsel
 snoop
 textual

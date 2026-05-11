@@ -1,5 +1,6 @@
 from enum import StrEnum
 from pathlib import Path
+import copy
 import dataclasses
 import json
 
@@ -31,17 +32,20 @@ class VideoListScreen(Screen):
         SORT_BY_IMDB_YEAR_ASCENDING = 'Sort by IMDB Year Ascending'
         SORT_BY_IMDB_YEAR_DESCENDING = 'Sort by IMDB Year Descending'
 
-    BINDINGS = [('s', 'sort_video_list', 'Sort List'), ]
+    BINDINGS = [('s', 'sort_video_list', 'Sort List'),
+                ("delete", "delete_row", "Delete Row")]
 
     def __init__(self) -> None:
         super().__init__()
         self.video_files: dict[str, VideoFile] = dict()
         self.sort_by = self.SortByOptions.SORT_BY_NAME_ASCENDING
-        self.data_table: DataTable = DataTable(show_header=True, cell_padding=2, header_height=1, cursor_type='row', id='video_files')
+        # self.data_table: DataTable = DataTable(show_header=True, cell_padding=1, header_height=1, cursor_type='row', id='video_files')
+        self.data_table: DataTable = DataTable(show_header=True, cell_padding=0, header_height=1, cursor_type='row', id='video_files')
         self.imdb_tt_column_key = None
         self.imdb_name_column_key = None
         self.imdb_year_column_key = None
         self.imdb_rating_column_key = None
+        self.imdb_resolution_column_key = None
         self.filepath_column_key = None
 
     def compose(self) -> ComposeResult:
@@ -49,11 +53,17 @@ class VideoListScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.imdb_tt_column_key = self.data_table.add_column(' IMDB Number  ')
-        self.imdb_name_column_key = self.data_table.add_column('[reverse]  IMDB Name \u2191 [/reverse]')
-        self.imdb_year_column_key = self.data_table.add_column(' Year  ')
-        self.imdb_rating_column_key = self.data_table.add_column(' Rating  ')
-        self.filepath_column_key = self.data_table.add_column(' Name ')
+        self.imdb_tt_column_key = self.data_table.add_column('IMDB Number  ')
+        self.data_table.add_column(' ')
+        self.imdb_name_column_key = self.data_table.add_column('[reverse]IMDB Name \u2191 [/reverse]')
+        self.data_table.add_column(' ')
+        self.imdb_year_column_key = self.data_table.add_column('Year  ')
+        self.data_table.add_column(' ')
+        self.imdb_rating_column_key = self.data_table.add_column('Rating  ')
+        self.data_table.add_column(' ')
+        self.imdb_resolution_column_key = self.data_table.add_column('Resolution')
+        self.data_table.add_column(' ')
+        self.filepath_column_key = self.data_table.add_column('Name  ')
 
     def load_video_files(self):
         def _file_open_result(file_path: Path | None) -> Path | None:
@@ -66,8 +76,9 @@ class VideoListScreen(Screen):
                     video_file_path = video_file_dict['file_path']
                     video_file = VideoFile(**video_file_dict)
                     video_filename = Path(video_file.file_path).name
+                    video_resolution = str(video_file.video_resolution) if video_file.video_resolution else ''
                     self.video_files[video_file_path] = video_file
-                    self.data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_file.imdb_rating, video_filename, key=video_file.file_path)
+                    self.data_table.add_row(video_file.imdb_tt, '', video_file.imdb_name, '', video_file.imdb_year, '', video_file.imdb_rating, '', video_resolution, '', video_filename, key=video_file.file_path)
                 self.sort_table()
 
         self.app.push_screen(FileOpen(), _file_open_result)
@@ -122,35 +133,35 @@ class VideoListScreen(Screen):
         self.data_table.columns[self.filepath_column_key].label = 'File Name  '
 
         if self.sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_TT_ASCENDING:
-            self.data_table.columns[self.imdb_tt_column_key].label = '[reverse] IMDB Number \u2191[/reverse]'
+            self.data_table.columns[self.imdb_tt_column_key].label = '[reverse]IMDB Number \u2191[/reverse]'
             self.data_table.sort(key=lambda row: row[0].lower())
         elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_TT_DESCENDING:
-            self.data_table.columns[self.imdb_tt_column_key].label = '[reverse] IMDB Number \u2193[/reverse]'
+            self.data_table.columns[self.imdb_tt_column_key].label = '[reverse]IMDB Number \u2193[/reverse]'
             self.data_table.sort(key=lambda row: row[0].lower(), reverse=True)
         elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_NAME_ASCENDING:
-            self.data_table.columns[self.imdb_name_column_key].label = '[reverse] IMDB Name \u2191[/reverse]'
-            self.data_table.sort(key=lambda row: row[1].lower())
+            self.data_table.columns[self.imdb_name_column_key].label = '[reverse]IMDB Name \u2191[/reverse]'
+            self.data_table.sort(key=lambda row: row[2].lower())
         elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_NAME_DESCENDING:
-            self.data_table.columns[self.imdb_name_column_key].label = '[reverse] IMDB Name \u2193[/reverse]'
-            self.data_table.sort(key=lambda row: row[1].lower(), reverse=True)
+            self.data_table.columns[self.imdb_name_column_key].label = '[reverse]IMDB Name \u2193[/reverse]'
+            self.data_table.sort(key=lambda row: row[2].lower(), reverse=True)
         elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_YEAR_ASCENDING:
-            self.data_table.columns[self.imdb_year_column_key].label = '[reverse] Year \u2191[/reverse]'
-            self.data_table.sort(key=lambda row: int(row[2]) if row[2] else 0)
+            self.data_table.columns[self.imdb_year_column_key].label = '[reverse]Year \u2191[/reverse]'
+            self.data_table.sort(key=lambda row: int(row[4]) if row[4] else 0)
         elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_YEAR_DESCENDING:
-            self.data_table.columns[self.imdb_year_column_key].label = '[reverse] Year \u2193[/reverse]'
-            self.data_table.sort(key=lambda row: int(row[2]) if row[2] else 0, reverse=True)
+            self.data_table.columns[self.imdb_year_column_key].label = '[reverse]Year \u2193[/reverse]'
+            self.data_table.sort(key=lambda row: int(row[4]) if row[4] else 0, reverse=True)
         elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_RATING_ASCENDING:
-            self.data_table.columns[self.imdb_rating_column_key].label = '[reverse] Rating \u2191[/reverse]'
-            self.data_table.sort(key=lambda row: float(row[3]) if row[3] else 0.0)
+            self.data_table.columns[self.imdb_rating_column_key].label = '[reverse]Rating \u2191[/reverse]'
+            self.data_table.sort(key=lambda row: float(row[6]) if row[6] else 0.0)
         elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_IMDB_RATING_DESCENDING:
-            self.data_table.columns[self.imdb_rating_column_key].label = '[reverse] Rating \u2193[/reverse]'
-            self.data_table.sort(key=lambda row: float(row[3]) if row[3] else 0.0, reverse=True)
+            self.data_table.columns[self.imdb_rating_column_key].label = '[reverse]Rating \u2193[/reverse]'
+            self.data_table.sort(key=lambda row: float(row[6]) if row[6] else 0.0, reverse=True)
         elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_FILEPATH_ASCENDING:
-            self.data_table.columns[self.filepath_column_key].label = '[reverse] File Name \u2191 [/reverse]'
-            self.data_table.sort(key=lambda row: row[4].lower())
+            self.data_table.columns[self.filepath_column_key].label = '[reverse]File Name \u2191 [/reverse]'
+            self.data_table.sort(key=lambda row: row[10].lower())
         elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_FILEPATH_DESCENDING:
-            self.data_table.columns[self.filepath_column_key].label = '[reverse] File Name \u2193[/reverse]'
-            self.data_table.sort(key=lambda row: row[4].lower(), reverse=True)
+            self.data_table.columns[self.filepath_column_key].label = '[reverse]File Name \u2193[/reverse]'
+            self.data_table.sort(key=lambda row: row[10].lower(), reverse=True)
 
         self.data_table.refresh()
 
@@ -164,6 +175,10 @@ class VideoListScreen(Screen):
             # TODO: Sorting without horrible performance hit....?
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        def _movie_details_callback(_video_file: VideoFile) -> None:
+            if _video_file:
+                self.post_message(LogMessage(f'[VideoListScreen] VideoFile was updated'))
+
         self.post_message(LogMessage(f'[VideoListScreen] DataTable row selected: cursor_row={event.cursor_row}, key={event.row_key}'))
         row_data = self.data_table.get_row_at(event.cursor_row)
         self.post_message(LogMessage(f'[VideoListScreen] DataTable row data by index: {row_data}'))
@@ -173,7 +188,7 @@ class VideoListScreen(Screen):
         file_path = event.row_key.value
         video_file = self.video_files[file_path]
 
-        self.app.push_screen(ShowMovieDetailsModal(video_file))
+        self.app.push_screen(ShowMovieDetailsModal(copy.deepcopy(video_file)), _movie_details_callback)
 
     def action_sort_video_list(self):
         def _get_sort_option_result(sort_by_option: VideoListScreen.SortByOptions | None) -> Path | None:
@@ -203,3 +218,8 @@ class VideoListScreen(Screen):
 
         if self.sort_by != prev_sort_by:
             self.sort_table()
+
+    def action_delete_row(self) -> None:
+        row_key, column_key = self.data_table.coordinate_to_cell_key(self.data_table.cursor_coordinate)
+        self.post_message(LogMessage(f'[VideoListScreen] Deleting row: row_key={row_key}'))
+        # self.remove_row(row_key)
