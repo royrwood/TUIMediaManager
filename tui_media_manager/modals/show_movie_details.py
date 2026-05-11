@@ -21,6 +21,7 @@ class ShowMovieDetailsModal(ModalScreen):
                 width: auto;
                 height: auto;
                 keyline: thin $primary;
+                # border: round $primary;
         
                 & > #file_path_id {
                     width: 100%;

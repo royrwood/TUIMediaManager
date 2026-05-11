@@ -11,6 +11,8 @@ import aiohttp
 @dataclasses.dataclass
 class VideoFile:
     file_path: str = ''
+    file_size: int = 0
+    file_resolution: tuple[int, int] = None
     scrubbed_file_name: str = ''
     scrubbed_file_year: str = ''
     imdb_tt: str = ''
@@ -19,7 +21,6 @@ class VideoFile:
     imdb_rating: str = ''
     imdb_genres: list[str] = None
     imdb_plot: str = None
-    video_resolution: tuple[int, int] = None
 
 
 @dataclasses.dataclass

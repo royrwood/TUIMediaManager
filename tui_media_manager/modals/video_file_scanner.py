@@ -139,7 +139,11 @@ class VideoFileScannerModal(ModalScreen[bool]):
                         cv2_width = int(cv2_video.get(cv2.CAP_PROP_FRAME_WIDTH))
                         cv2_height = int(cv2_video.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
+                        file_size = os.path.getsize(file_path)
+
                         video_file = VideoFile(file_path=file_path,
+                                               file_resolution=(cv2_width, cv2_height),
+                                               file_size=file_size,
                                                scrubbed_file_name=scrubbed_video_file_name,
                                                scrubbed_file_year=scrubbed_year,
                                                imdb_tt=imdb_info.imdb_tt,
@@ -147,8 +151,7 @@ class VideoFileScannerModal(ModalScreen[bool]):
                                                imdb_year=imdb_info.imdb_year,
                                                imdb_rating=imdb_info.imdb_rating,
                                                imdb_plot=imdb_info.imdb_plot,
-                                               imdb_genres=imdb_info.imdb_genres,
-                                               video_resolution=(cv2_width, cv2_height))
+                                               imdb_genres=imdb_info.imdb_genres)
 
                         add_video_file_cb(video_file)
 

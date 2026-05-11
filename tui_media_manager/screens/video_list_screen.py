@@ -3,6 +3,7 @@ from pathlib import Path
 import copy
 import dataclasses
 import json
+import math
 
 from textual_fspicker import SelectDirectory, FileOpen, FileSave
 
@@ -17,6 +18,17 @@ from tui_media_manager.modals.show_movie_details import ShowMovieDetailsModal
 from tui_media_manager.modals.video_file_scanner import VideoFileScannerModal
 from tui_media_manager.modals.popup_menu import PopupMenuModal
 from tui_media_manager.modals.button_choices import ButtonChoicesModal
+
+
+def format_bytes(size_bytes):
+    if not size_bytes:
+        return "0"
+    size_unit = ("B", "KB", "MB", "GB")
+    size_unit_index = int(math.floor(math.log(size_bytes, 1024)))
+    size_unit_str = size_unit[size_unit_index] if size_unit_index < len(size_unit) else "??"
+    p = math.pow(1024, size_unit_index)
+    s = round(size_bytes / p, 1)
+    return f'{s}{size_unit_str}'
 
 
 class VideoListScreen(Screen):
@@ -39,7 +51,6 @@ class VideoListScreen(Screen):
         super().__init__()
         self.video_files: dict[str, VideoFile] = dict()
         self.sort_by = self.SortByOptions.SORT_BY_NAME_ASCENDING
-        # self.data_table: DataTable = DataTable(show_header=True, cell_padding=1, header_height=1, cursor_type='row', id='video_files')
         self.data_table: DataTable = DataTable(show_header=True, cell_padding=0, header_height=1, cursor_type='row', id='video_files')
         self.imdb_tt_column_key = None
         self.imdb_name_column_key = None
@@ -63,7 +74,29 @@ class VideoListScreen(Screen):
         self.data_table.add_column(' ')
         self.imdb_resolution_column_key = self.data_table.add_column('Resolution')
         self.data_table.add_column(' ')
+        self.imdb_resolution_column_key = self.data_table.add_column('Size')
+        self.data_table.add_column(' ')
         self.filepath_column_key = self.data_table.add_column('Name  ')
+
+    def add_video_file(self, video_file: VideoFile):
+        if video_file.file_path not in self.video_files:
+            self.video_files[video_file.file_path] = video_file
+            video_filename = Path(video_file.file_path).name
+            video_resolution = str(video_file.file_resolution) if video_file.file_resolution else ''
+            if not video_file.file_size:
+                video_file_size = '0'
+            elif video_file.file_size < 1024*1024:
+                s = int(video_file.file_size / 1024)
+                video_file_size = f'{s}KB'
+            elif video_file.file_size < 1024*1024*1024:
+                s = int(video_file.file_size / (1024*1024))
+                video_file_size = f'{s}MB'
+            else:
+                s = round(video_file.file_size / (1024*1024*1024), 1)
+                video_file_size = f'{s}GB'
+
+            # TODO: Sorting without horrible performance hit....?
+            self.data_table.add_row(video_file.imdb_tt, '', video_file.imdb_name, '', video_file.imdb_year, '', video_file.imdb_rating, '', video_resolution, '', video_file_size, '', video_filename, key=video_file.file_path)
 
     def load_video_files(self):
         def _file_open_result(file_path: Path | None) -> Path | None:
@@ -73,12 +106,7 @@ class VideoListScreen(Screen):
                     video_files_json = json.load(file)
                 self.video_files = dict()
                 for video_file_dict in video_files_json:
-                    video_file_path = video_file_dict['file_path']
-                    video_file = VideoFile(**video_file_dict)
-                    video_filename = Path(video_file.file_path).name
-                    video_resolution = str(video_file.video_resolution) if video_file.video_resolution else ''
-                    self.video_files[video_file_path] = video_file
-                    self.data_table.add_row(video_file.imdb_tt, '', video_file.imdb_name, '', video_file.imdb_year, '', video_file.imdb_rating, '', video_resolution, '', video_filename, key=video_file.file_path)
+                    self.add_video_file(VideoFile(**video_file_dict))
                 self.sort_table()
 
         self.app.push_screen(FileOpen(), _file_open_result)
@@ -158,21 +186,12 @@ class VideoListScreen(Screen):
             self.data_table.sort(key=lambda row: float(row[6]) if row[6] else 0.0, reverse=True)
         elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_FILEPATH_ASCENDING:
             self.data_table.columns[self.filepath_column_key].label = '[reverse]File Name \u2191 [/reverse]'
-            self.data_table.sort(key=lambda row: row[10].lower())
+            self.data_table.sort(key=lambda row: row[12].lower())
         elif self.sort_by == VideoListScreen.SortByOptions.SORT_BY_FILEPATH_DESCENDING:
             self.data_table.columns[self.filepath_column_key].label = '[reverse]File Name \u2193[/reverse]'
-            self.data_table.sort(key=lambda row: row[10].lower(), reverse=True)
+            self.data_table.sort(key=lambda row: row[12].lower(), reverse=True)
 
         self.data_table.refresh()
-
-    def add_video_file(self, video_file: VideoFile):
-        if video_file.file_path not in self.video_files:
-            self.video_files[video_file.file_path] = video_file
-
-            video_filename = Path(video_file.file_path).name
-            self.data_table.add_row(video_file.imdb_tt, video_file.imdb_name, video_file.imdb_year, video_file.imdb_rating, video_filename, key=video_file.file_path)
-
-            # TODO: Sorting without horrible performance hit....?
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         def _movie_details_callback(_video_file: VideoFile) -> None:
